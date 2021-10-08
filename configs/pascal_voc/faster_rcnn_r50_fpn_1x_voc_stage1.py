@@ -2,9 +2,9 @@ _base_ = [
     '../_base_/models/faster_rcnn_r50_fpn.py', '../_base_/datasets/vocstage1.py',
     '../_base_/default_runtime.py'
 ]
-data_root = 'C:/Users/Alex/WorkSpace/dataset/VOCdevkit/'
+data_root = '/home/qiucm/workspace/dataset/VOCdevkit/'
 data = dict(
-    samples_per_gpu=16,
+    samples_per_gpu=6,
     workers_per_gpu=0,
 )
 model = dict(

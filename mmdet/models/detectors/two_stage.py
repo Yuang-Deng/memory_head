@@ -150,7 +150,7 @@ class TwoStageDetector(BaseDetector):
         # losses.update(roi_losses)
 
         # return losses
-        if '_' not in img_metas[0]['ori_filename'] and '_' in img_metas[-1]['ori_filename']:
+        if '_' not in img_metas[0]['ori_filename'] and '_' in img_metas[-1]['ori_filename'] and 'train_mod' in self.train_cfg and self.train_cfg.train_mod=='ssod':
             return self._stage2_forward_train(img, img_metas, gt_bboxes, gt_labels, gt_bboxes_ignore,
                          gt_masks, proposals, **kwargs)
         else:

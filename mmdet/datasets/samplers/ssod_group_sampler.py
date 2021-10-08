@@ -205,7 +205,7 @@ class SSODDistributedGroupSampler(Sampler):
             # unlabeled_size_hori = self.group_sizes[1]
             labeled_indice_hori = np.where(self.flag == 0)
             labeled_indice_hori = np.where(self.flag == 0)[0]
-            unlabeled_indice_hori = np.where(self.flag == 1)[0]
+            unlabeled_indice_hori = np.where(self.flag == 2)[0]
             labeled_indice_hori = labeled_indice_hori[list(
                 torch.randperm(int(len(labeled_indice_hori)), generator=g).numpy())].tolist()
             unlabeled_indice_hori = unlabeled_indice_hori[list(
@@ -214,7 +214,7 @@ class SSODDistributedGroupSampler(Sampler):
             
             # labeled_size_vert = self.group_sizes[2]
             # unlabeled_size_vert = self.group_sizes[3]
-            labeled_indice_vert = np.where(self.flag == 2)[0]
+            labeled_indice_vert = np.where(self.flag == 1)[0]
             unlabeled_indice_vert = np.where(self.flag == 3)[0]
             labeled_indice_vert = labeled_indice_vert[list(
                 torch.randperm(int(len(labeled_indice_vert)), generator=g).numpy())].tolist()

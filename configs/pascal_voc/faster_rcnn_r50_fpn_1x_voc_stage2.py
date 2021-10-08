@@ -2,9 +2,9 @@ _base_ = [
     '../_base_/models/faster_rcnn_r50_fpn.py', '../_base_/datasets/vocstage2.py',
     '../_base_/default_runtime.py'
 ]
-data_root = 'C:/Users/Alex/WorkSpace/dataset/VOCdevkit/'
+data_root = '/home/qiucm/workspace/dataset/VOCdevkit/'
 data = dict(
-    samples_per_gpu=16,
+    samples_per_gpu=4,
     workers_per_gpu=0,
 )
 model = dict(
@@ -12,7 +12,8 @@ model = dict(
         bbox_head=dict(num_classes=20)
     ),
     train_cfg=dict(
-        label_type2weight=[1,2,2]
+        label_type2weight=[1,2,2],
+        train_mod='ssod'
     ),
 )
 # optimizer
