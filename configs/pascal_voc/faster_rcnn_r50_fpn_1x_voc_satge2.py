@@ -1,5 +1,5 @@
 _base_ = [
-    '../_base_/models/faster_rcnn_r50_fpn.py', '../_base_/datasets/voc0712.py',
+    '../_base_/models/faster_rcnn_r50_fpn.py', '../_base_/datasets/vocstage2.py',
     '../_base_/default_runtime.py'
 ]
 data_root = 'C:/Users/Alex/WorkSpace/dataset/VOCdevkit/'

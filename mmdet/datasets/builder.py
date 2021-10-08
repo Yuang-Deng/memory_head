@@ -10,7 +10,7 @@ from mmcv.runner import get_dist_info
 from mmcv.utils import Registry, build_from_cfg
 from torch.utils.data import DataLoader
 
-from .samplers import DistributedGroupSampler, DistributedSampler, GroupSampler
+from .samplers import DistributedGroupSampler, DistributedSampler, GroupSampler, SSODGroupSampler, SSODDistributedGroupSampler
 
 if platform.system() != 'Windows':
     # https://github.com/pytorch/pytorch/issues/973
@@ -32,6 +32,8 @@ def _concat_dataset(cfg, default_args=None):
     seg_prefixes = cfg.get('seg_prefix', None)
     proposal_files = cfg.get('proposal_file', None)
     separate_eval = cfg.get('separate_eval', True)
+    sample_percents = cfg.get('sample_persent', None)
+    label_types = cfg.get('label_type', None)
 
     datasets = []
     num_dset = len(ann_files)
@@ -47,6 +49,10 @@ def _concat_dataset(cfg, default_args=None):
             data_cfg['seg_prefix'] = seg_prefixes[i]
         if isinstance(proposal_files, (list, tuple)):
             data_cfg['proposal_file'] = proposal_files[i]
+        if isinstance(sample_percents, (list, tuple)):
+            data_cfg['sample_persent'] = sample_percents[i]
+        if isinstance(label_types, (list, tuple)):
+            data_cfg['label_type'] = label_types[i]
         datasets.append(build_dataset(data_cfg, default_args))
 
     return ConcatDataset(datasets, separate_eval)
@@ -113,7 +119,7 @@ def build_dataloader(dataset,
         # DistributedGroupSampler will definitely shuffle the data to satisfy
         # that images on each GPU are in the same group
         if shuffle:
-            sampler = DistributedGroupSampler(
+            sampler = SSODDistributedGroupSampler(
                 dataset, samples_per_gpu, world_size, rank, seed=seed)
         else:
             sampler = DistributedSampler(
@@ -121,7 +127,7 @@ def build_dataloader(dataset,
         batch_size = samples_per_gpu
         num_workers = workers_per_gpu
     else:
-        sampler = GroupSampler(dataset, samples_per_gpu) if shuffle else None
+        sampler = SSODGroupSampler(dataset, samples_per_gpu) if shuffle else None
         batch_size = num_gpus * samples_per_gpu
         num_workers = num_gpus * workers_per_gpu
 

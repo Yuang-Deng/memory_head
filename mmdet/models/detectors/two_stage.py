@@ -124,6 +124,48 @@ class TwoStageDetector(BaseDetector):
         Returns:
             dict[str, Tensor]: a dictionary of loss components
         """
+        # x = self.extract_feat(img)
+
+        # losses = dict()
+
+        # # RPN forward and loss
+        # if self.with_rpn:
+        #     proposal_cfg = self.train_cfg.get('rpn_proposal',
+        #                                       self.test_cfg.rpn)
+        #     rpn_losses, proposal_list = self.rpn_head.forward_train(
+        #         x,
+        #         img_metas,
+        #         gt_bboxes,
+        #         gt_labels=None,
+        #         gt_bboxes_ignore=gt_bboxes_ignore,
+        #         proposal_cfg=proposal_cfg)
+        #     losses.update(rpn_losses)
+        # else:
+        #     proposal_list = proposals
+
+        # roi_losses = self.roi_head.forward_train(x, img_metas, proposal_list,
+        #                                          gt_bboxes, gt_labels,
+        #                                          gt_bboxes_ignore, gt_masks,
+        #                                          **kwargs)
+        # losses.update(roi_losses)
+
+        # return losses
+        if '_' not in img_metas[0]['ori_filename'] and '_' in img_metas[-1]['ori_filename']:
+            return self._stage2_forward_train(img, img_metas, gt_bboxes, gt_labels, gt_bboxes_ignore,
+                         gt_masks, proposals, **kwargs)
+        else:
+            return self._stage1_forward_train(img, img_metas, gt_bboxes, gt_labels, gt_bboxes_ignore,
+                         gt_masks, proposals, **kwargs)
+
+    def _stage1_forward_train(self,
+                      img,
+                      img_metas,
+                      gt_bboxes,
+                      gt_labels,
+                      gt_bboxes_ignore=None,
+                      gt_masks=None,
+                      proposals=None,
+                      **kwargs):
         x = self.extract_feat(img)
 
         losses = dict()
@@ -145,6 +187,61 @@ class TwoStageDetector(BaseDetector):
 
         roi_losses = self.roi_head.forward_train(x, img_metas, proposal_list,
                                                  gt_bboxes, gt_labels,
+                                                 gt_bboxes_ignore, gt_masks,
+                                                 **kwargs)
+        losses.update(roi_losses)
+
+        return losses
+    
+    def _stage2_forward_train(self,
+                      img,
+                      img_metas,
+                      gt_bboxes,
+                      gt_labels,
+                      gt_bboxes_ignore=None,
+                      gt_masks=None,
+                      proposals=None,
+                      **kwargs):
+        label_img, unlabel_img = img[:len(img) // 2], img[len(img) // 2:]
+        label_img_metas, unlabel_img_metas = img_metas[:len(img_metas) // 2], img_metas[len(img_metas) // 2:]
+        label_gt_bboxes, unlabel_gt_bboxes = gt_bboxes[:len(gt_bboxes) // 2], gt_bboxes[len(gt_bboxes) // 2:]
+        label_gt_labels, unlabel_gt_labels = gt_labels[:len(gt_labels) // 2], gt_labels[len(gt_labels) // 2:]
+        label_type2weight = self.train_cfg.label_type2weight
+
+        losses = dict()
+
+        label_x = self.extract_feat(label_img)
+        unlabel_x = self.extract_feat(unlabel_img)
+        # RPN forward and loss
+        if self.with_rpn:
+            proposal_cfg = self.train_cfg.get('rpn_proposal',
+                                              self.test_cfg.rpn)
+            rpn_losses, proposal_list = self.rpn_head.forward_train(
+                label_x,
+                label_img_metas,
+                label_gt_bboxes,
+                gt_labels=None,
+                gt_bboxes_ignore=gt_bboxes_ignore,
+                proposal_cfg=proposal_cfg)
+            un_rpn_losses, un_proposal_list = self.rpn_head.forward_train(
+                unlabel_x,
+                unlabel_img_metas,
+                unlabel_gt_bboxes,
+                gt_labels=None,
+                gt_bboxes_ignore=gt_bboxes_ignore,
+                proposal_cfg=proposal_cfg)
+            for k in rpn_losses.keys():
+                rpn_losses[k] += un_rpn_losses[k] * label_type2weight[1]
+            losses.update(rpn_losses)
+        else:
+            proposal_list = proposals
+
+        roi_losses = self.roi_head.forward_train(label_x, label_img_metas, proposal_list,
+                                                 label_gt_bboxes, label_gt_labels,
+                                                 gt_bboxes_ignore, gt_masks,
+                                                 **kwargs)
+        roi_losses = self.roi_head.forward_train(unlabel_x, unlabel_img_metas, un_proposal_list,
+                                                 unlabel_gt_bboxes, unlabel_gt_labels,
                                                  gt_bboxes_ignore, gt_masks,
                                                  **kwargs)
         losses.update(roi_losses)

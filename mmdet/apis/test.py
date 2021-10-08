@@ -4,6 +4,8 @@ import pickle
 import shutil
 import tempfile
 import time
+import os
+from xml.dom.minidom import Document
 
 import mmcv
 import torch
@@ -12,7 +14,10 @@ from mmcv.image import tensor2imgs
 from mmcv.runner import get_dist_info
 
 from mmdet.core import encode_mask_results
-
+VOC_CLASSES = ['aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus', 'car',
+               'cat', 'chair', 'cow', 'diningtable', 'dog', 'horse',
+               'motorbike', 'person', 'pottedplant', 'sheep', 'sofa', 'train',
+               'tvmonitor']
 
 def single_gpu_test(model,
                     data_loader,
@@ -24,8 +29,17 @@ def single_gpu_test(model,
     dataset = data_loader.dataset
     prog_bar = mmcv.ProgressBar(len(dataset))
     for i, data in enumerate(data_loader):
+        flag = False
+        if 'gt_labels' in data.keys():
+            tags = data.pop('gt_labels')
+            box = data.pop('gt_bboxes')
+            # ori_box = data.pop('ori_boxes')
+            flag = True
         with torch.no_grad():
             result = model(return_loss=False, rescale=True, **data)
+
+        if flag:
+            cur_add_num, cur_pseudo_num = gen_voc_label(data, result, tags, box, box, [show_score_thr] * len(VOC_CLASSES))
 
         batch_size = len(result)
         if show or out_dir:
@@ -189,3 +203,89 @@ def collect_results_gpu(result_part, size):
         # the dataloader may pad some samples
         ordered_results = ordered_results[:size]
         return ordered_results
+
+def gen_voc_label(data, result, tags, boxes, ori_boxes, pseudo_th=0.9):
+    
+    add_num = [0]*20
+    pseudo_num = [0]*20
+    for idx, (d, tags_img, box_img, ori_box, r) in enumerate(zip(data['img_metas'], tags, boxes, ori_boxes, result)):
+        if 'test' in d.data[0][0]['filename']:
+            continue
+        doc = Document()
+        annotation = doc.createElement("annotation")
+        doc.appendChild(annotation)
+        folder = doc.createElement("folder")
+        filename = doc.createElement("filename")
+        size = doc.createElement("size")
+        width = doc.createElement("width")
+        height = doc.createElement("height")
+        depth = doc.createElement("depth")
+        size.appendChild(width)
+        size.appendChild(height)
+        size.appendChild(depth)
+        annotation.appendChild(folder)
+        annotation.appendChild(filename)
+        annotation.appendChild(size)
+        filenamee = doc.createTextNode(d.data[0][0]['ori_filename'].split('\\')[1])
+        foldername = doc.createTextNode(d.data[0][0]['ori_filename'].split('\\')[0])
+        widthnum = doc.createTextNode(str(d.data[0][0]['ori_shape'][0]))
+        heightnum = doc.createTextNode(str(d.data[0][0]['ori_shape'][1]))
+        depthnum = doc.createTextNode(str(d.data[0][0]['ori_shape'][2]))
+        folder.appendChild(foldername)
+        filename.appendChild(filenamee)
+        width.appendChild(widthnum)
+        height.appendChild(heightnum)
+        depth.appendChild(depthnum)
+        for t in tags_img[0]:
+            tag = doc.createElement("tag")
+            tagname = doc.createTextNode(VOC_CLASSES[t])
+            tag.appendChild(tagname)
+            annotation.appendChild(tag)
+        for ridx in range(len(r)):
+            classname = VOC_CLASSES[ridx]
+            for box in r[ridx]:
+                # print(box[4])
+                if box[4] < pseudo_th[ridx]:
+                    continue
+                # print(box)
+                pseudo_num[ridx] += 1
+                objectt = doc.createElement("object")
+                annotation.appendChild(objectt)
+                bndbox = doc.createElement("bndbox")
+                objectt.appendChild(bndbox)
+                xmin = doc.createElement("xmin")
+                ymin = doc.createElement("ymin")
+                xmax = doc.createElement("xmax")
+                ymax = doc.createElement("ymax")
+                score = doc.createElement("score")
+                calss = doc.createElement("name")
+                objectt.appendChild(calss)
+                calss.appendChild(doc.createTextNode(classname))
+                bndbox.appendChild(xmin)
+                bndbox.appendChild(ymin)
+                bndbox.appendChild(xmax)
+                bndbox.appendChild(ymax)
+                bndbox.appendChild(score)
+                difficult = doc.createElement("difficult")
+                difficult.appendChild(doc.createTextNode('0'))
+                objectt.appendChild(difficult)
+                xminnum = doc.createTextNode(str(box[0]))
+                yminnum = doc.createTextNode(str(box[1]))
+                xmaxnum = doc.createTextNode(str(box[2]))
+                ymaxnum = doc.createTextNode(str(box[3]))
+                scorenum = doc.createTextNode(str(box[4]))
+                xmin.appendChild(xminnum)
+                ymin.appendChild(yminnum)
+                xmax.appendChild(xmaxnum)
+                ymax.appendChild(ymaxnum)
+                score.appendChild(scorenum)
+        # f = open(os.path.join('C:/Users/Alex/WorkSpace/dataset/voc/VOCdevkit', os.path.join(d.data[0][0]['filename'].split('/')[7],
+        #                                                      os.path.join('Annotations',
+        #                                                                   d.data[0][0][
+        #                                                                       'ori_filename'].split(
+        #                                                                       '\\')[1].split('.')[
+        #                                                                       0] + '.xml'))),
+        #          "w")
+        # f.write(doc.toprettyxml(indent="  "))
+        # f.close()
+    return add_num, pseudo_num
