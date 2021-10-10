@@ -32,9 +32,6 @@ data = dict(
     samples_per_gpu=2,
     workers_per_gpu=2,
     train=dict(
-        type='RepeatDataset',
-        times=3,
-        dataset=dict(
             type=dataset_type,
             ann_file=[
                 data_root + 'VOC2007/ImageSets/Main/trainval.txt',
@@ -42,7 +39,7 @@ data = dict(
             ],
             img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
             label_type=[0, 1],
-            pipeline=train_pipeline)),
+            pipeline=train_pipeline),
     val=dict(
         type=dataset_type,
         ann_file=data_root + 'VOC2007/ImageSets/Main/test.txt',

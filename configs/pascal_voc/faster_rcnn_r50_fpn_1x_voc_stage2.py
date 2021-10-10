@@ -4,7 +4,7 @@ _base_ = [
 ]
 data_root = '/home/qiucm/workspace/dataset/VOCdevkit/'
 data = dict(
-    samples_per_gpu=4,
+    samples_per_gpu=6,
     workers_per_gpu=0,
 )
 model = dict(
@@ -21,7 +21,7 @@ optimizer = dict(type='SGD', lr=0.01, momentum=0.9, weight_decay=0.0001)
 optimizer_config = dict(grad_clip=None)
 # learning policy
 # actual epoch = 3 * 3 = 9
-lr_config = dict(policy='step', step=[3])
+lr_config = dict(policy='step', step=[9])
 # runtime settings
 runner = dict(
-    type='EpochBasedRunner', max_epochs=4)  # actual epoch = 4 * 3 = 12
+    type='EpochBasedRunner', max_epochs=12)  # actual epoch = 4 * 3 = 12
