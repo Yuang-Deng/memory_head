@@ -290,7 +290,7 @@ class MMBBoxHead(BaseModule):
         # for ms in mid_score.split(split_list):
         #     ms = ms.sum(dim=0)
         tag_score = torch.cat([ms.sum(dim=0)[None, :] for ms in mid_score.split(split_list)], dim=0)
-        losses['loss_mid'] = - ((img_label * torch.log(tag_score)).sum() / img_label.size(0)) * self.loss_mid_weight
+        losses['loss_mid'] = - ((img_label * torch.log(tag_score) + (1 - img_label) * torch.log(1 - tag_score)).sum() / img_label.size(0)) * self.loss_mid_weight
         # losses['loss_mid'] = - ((one_hot_label * torch.log(mid_score)).sum() / cls_score.size(0)) * self.loss_mid_weight
         # print(losses['loss_mid'])
         if cls_score is not None:
