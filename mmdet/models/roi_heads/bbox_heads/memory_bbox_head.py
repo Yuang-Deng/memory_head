@@ -259,6 +259,14 @@ class MMBBoxHead(BaseModule):
         one_hot_label.scatter_(1, labels[:, None], 1)
         return one_hot_label
 
+    def generate_img_label(self, num_classes, gt_tags, device):
+        # gt_tags = torch.cat(gt_tags, dim=-1)
+        img_label = torch.zeros(len(gt_tags), num_classes)
+        for i in range(len(gt_tags)):
+            for tag in gt_tags[i]:
+                img_label[i, tag] = 1
+        return img_label.to(device)
+
     @force_fp32(apply_to=('cls_score', 'bbox_pred'))
     def loss(self,
              cls_score,
@@ -269,14 +277,21 @@ class MMBBoxHead(BaseModule):
              bbox_targets,
              bbox_weights,
              reduction_override=None,
-             num_per_img=512):
+             num_per_img=512,
+             gt_tags=None,
+             **kwargs):
         losses = dict()
         split_list = [num_per_img] * (cls_score.size(0) // num_per_img)
-        det_logit = torch.cat([torch.softmax(sc, dim=0) for sc in cls_score.split(split_list)], dim=0)
-        cls_logit = torch.softmax(cls_score, dim=-1)
-        one_hot_label = self.gen_one_hot_label(self.num_classes, labels, labels.device)
+        det_logit = torch.cat([torch.softmax(sc, dim=0) for sc in cls_score[:, :-1].split(split_list)], dim=0)
+        cls_logit = torch.softmax(cls_score[:, :-1], dim=-1)
+        # one_hot_label = self.gen_one_hot_label(self.num_classes, labels, labels.device)
+        img_label = self.generate_img_label(self.num_classes, gt_tags, labels.device)
         mid_score = det_logit * cls_logit
-        losses['loss_mid'] = - ((one_hot_label * torch.log(mid_score)).sum() / cls_score.size(0)) * self.loss_mid_weight
+        # for ms in mid_score.split(split_list):
+        #     ms = ms.sum(dim=0)
+        tag_score = torch.cat([ms.sum(dim=0)[None, :] for ms in mid_score.split(split_list)], dim=0)
+        losses['loss_mid'] = - ((img_label * torch.log(tag_score)).sum() / img_label.size(0)) * self.loss_mid_weight
+        # losses['loss_mid'] = - ((one_hot_label * torch.log(mid_score)).sum() / cls_score.size(0)) * self.loss_mid_weight
         # print(losses['loss_mid'])
         if cls_score is not None:
             avg_factor = max(torch.sum(label_weights > 0).float().item(), 1.)

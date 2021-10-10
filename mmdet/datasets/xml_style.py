@@ -103,8 +103,15 @@ class XMLDataset(CustomDataset):
         root = tree.getroot()
         bboxes = []
         labels = []
+        tags = set()
         bboxes_ignore = []
         labels_ignore = []
+        for obj in root.findall('tag'):
+            name = obj.find('name').text
+            if name not in self.CLASSES:
+                continue
+            label = self.cat2label[name]
+            tags.add(label)
         for obj in root.findall('object'):
             name = obj.find('name').text
             if name not in self.CLASSES:
@@ -146,9 +153,14 @@ class XMLDataset(CustomDataset):
         else:
             bboxes_ignore = np.array(bboxes_ignore, ndmin=2) - 1
             labels_ignore = np.array(labels_ignore)
+        if not tags:
+            tags = np.unique(labels)
+        else:
+            tags = np.array(list(tags))
         ann = dict(
             bboxes=bboxes.astype(np.float32),
             labels=labels.astype(np.int64),
+            tags=tags.astype(np.int64),
             bboxes_ignore=bboxes_ignore.astype(np.float32),
             labels_ignore=labels_ignore.astype(np.int64))
         return ann
