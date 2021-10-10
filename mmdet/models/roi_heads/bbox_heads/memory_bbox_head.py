@@ -284,13 +284,12 @@ class MMBBoxHead(BaseModule):
         split_list = [num_per_img] * (cls_score.size(0) // num_per_img)
         det_logit = torch.cat([torch.softmax(sc, dim=0) for sc in cls_score[:, :-1].split(split_list)], dim=0)
         cls_logit = torch.softmax(cls_score[:, :-1], dim=-1)
-        # one_hot_label = self.gen_one_hot_label(self.num_classes, labels, labels.device)
         img_label = self.generate_img_label(self.num_classes, gt_tags, labels.device)
         mid_score = det_logit * cls_logit
-        # for ms in mid_score.split(split_list):
-        #     ms = ms.sum(dim=0)
         tag_score = torch.cat([ms.sum(dim=0)[None, :] for ms in mid_score.split(split_list)], dim=0)
-        losses['loss_mid'] = - ((img_label * torch.log(tag_score) + (1 - img_label) * torch.log(1 - tag_score)).sum() / img_label.size(0)) * self.loss_mid_weight
+        image_level_scores = torch.clamp(tag_score, min=0.0, max=1.0)
+        losses['loss_mid'] = (F.binary_cross_entropy(image_level_scores, img_label, reduction="sum") / img_label.size(0)) * self.loss_mid_weight
+        # losses['loss_mid'] = - ((img_label * torch.log(tag_score) + (1 - img_label) * torch.log(1 - tag_score)).sum() / img_label.size(0)) * self.loss_mid_weight
         # losses['loss_mid'] = - ((one_hot_label * torch.log(mid_score)).sum() / cls_score.size(0)) * self.loss_mid_weight
         # print(losses['loss_mid'])
         if cls_score is not None:
