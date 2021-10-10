@@ -65,6 +65,14 @@ class MMConvFCBBoxHead(MMBBoxHead):
         self.cls_convs, self.cls_fcs, self.cls_last_dim = \
             self._add_conv_fc_branch(
                 self.num_cls_convs, self.num_cls_fcs, self.shared_out_channels)
+        
+        self.mid_cls_convs, self.mid_cls_fcs, self.mid_cls_last_dim = \
+            self._add_conv_fc_branch(
+                self.num_cls_convs, self.num_cls_fcs, self.shared_out_channels)
+
+        self.mid_det_convs, self.mid_det_fcs, self.mid_det_last_dim = \
+            self._add_conv_fc_branch(
+                self.num_cls_convs, self.num_cls_fcs, self.shared_out_channels)
 
         # add reg specific branch
         self.reg_convs, self.reg_fcs, self.reg_last_dim = \
@@ -88,6 +96,14 @@ class MMConvFCBBoxHead(MMBBoxHead):
                 self.cls_predictor_cfg,
                 in_features=self.cls_last_dim,
                 out_features=cls_channels)
+            self.fc_mid_cls = build_linear_layer(
+                self.cls_predictor_cfg,
+                in_features=self.cls_last_dim,
+                out_features=self.num_classes)
+            self.fc_mid_det = build_linear_layer(
+                self.cls_predictor_cfg,
+                in_features=self.cls_last_dim,
+                out_features=self.num_classes)
         if self.with_reg:
             out_dim_reg = (4 if self.reg_class_agnostic else 4 *
                            self.num_classes)
@@ -166,6 +182,8 @@ class MMConvFCBBoxHead(MMBBoxHead):
         # separate branches
         x_cls = x
         x_reg = x
+        x_mid_cls = x
+        x_mid_det = x
 
         for conv in self.cls_convs:
             x_cls = conv(x_cls)
@@ -176,6 +194,24 @@ class MMConvFCBBoxHead(MMBBoxHead):
         for fc in self.cls_fcs:
             x_cls = self.relu(fc(x_cls))
 
+        for conv in self.mid_cls_convs:
+            x_mid_cls = conv(x_mid_cls)
+        if x_mid_cls.dim() > 2:
+            if self.with_avg_pool:
+                x_mid_cls = self.avg_pool(x_mid_cls)
+            x_mid_cls = x_mid_cls.flatten(1)
+        for fc in self.mid_cls_fcs:
+            x_mid_cls = self.relu(fc(x_mid_cls))
+
+        for conv in self.mid_det_convs:
+            x_mid_det = conv(x_mid_det)
+        if x_mid_det.dim() > 2:
+            if self.with_avg_pool:
+                x_mid_det = self.avg_pool(x_mid_det)
+            x_mid_det = x_mid_det.flatten(1)
+        for fc in self.mid_det_fcs:
+            x_mid_det = self.relu(fc(x_mid_det))
+
         for conv in self.reg_convs:
             x_reg = conv(x_reg)
         if x_reg.dim() > 2:
@@ -185,9 +221,9 @@ class MMConvFCBBoxHead(MMBBoxHead):
         for fc in self.reg_fcs:
             x_reg = self.relu(fc(x_reg))
 
-        cls_score = self.fc_cls(x_cls) if self.with_cls else None
+        cls_score, mid_cls_score, mid_det_score = self.fc_cls(x_cls), self.fc_mid_cls(x_mid_cls), self.fc_mid_det(x_mid_det) if self.with_cls else None
         bbox_pred = self.fc_reg(x_reg) if self.with_reg else None
-        return cls_score, bbox_pred
+        return cls_score, mid_cls_score, mid_det_score, bbox_pred
 
 
 @HEADS.register_module()

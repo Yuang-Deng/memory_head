@@ -9,10 +9,11 @@ data = dict(
 )
 model = dict(
     roi_head=dict(
+        type='MMStandardRoIHead',
         bbox_head=dict(
             type='MMShared2FCBBoxHead',
             num_classes=20,
-            loss_mid_weight=0.1,
+            loss_mid_weight=1,
         )
     ),
     train_cfg=dict(

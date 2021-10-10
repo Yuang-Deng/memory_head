@@ -58,8 +58,7 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
                       gt_bboxes,
                       gt_labels,
                       gt_bboxes_ignore=None,
-                      gt_masks=None,
-                      **kwargs):
+                      gt_masks=None):
         """
         Args:
             x (list[Tensor]): list of multi-level img features.
@@ -103,7 +102,7 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
         if self.with_bbox:
             bbox_results = self._bbox_forward_train(x, sampling_results,
                                                     gt_bboxes, gt_labels,
-                                                    img_metas, **kwargs)
+                                                    img_metas)
             losses.update(bbox_results['loss_bbox'])
 
         # mask head forward and loss
@@ -129,7 +128,7 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
         return bbox_results
 
     def _bbox_forward_train(self, x, sampling_results, gt_bboxes, gt_labels,
-                            img_metas, **kwargs):
+                            img_metas):
         """Run forward function and calculate loss for box head in training."""
         rois = bbox2roi([res.bboxes for res in sampling_results])
         bbox_results = self._bbox_forward(x, rois)
@@ -138,7 +137,7 @@ class StandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
                                                   gt_labels, self.train_cfg)
         loss_bbox = self.bbox_head.loss(bbox_results['cls_score'],
                                         bbox_results['bbox_pred'], rois,
-                                        *bbox_targets, num_per_img=self.train_cfg.sampler.num, **kwargs)
+                                        *bbox_targets)
 
         bbox_results.update(loss_bbox=loss_bbox)
         return bbox_results

@@ -122,10 +122,14 @@ class MMStandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
             x[:self.bbox_roi_extractor.num_inputs], rois)
         if self.with_shared_head:
             bbox_feats = self.shared_head(bbox_feats)
-        cls_score, bbox_pred = self.bbox_head(bbox_feats)
+        cls_score, mid_cls_score, mid_det_score, bbox_pred = self.bbox_head(bbox_feats)
 
         bbox_results = dict(
-            cls_score=cls_score, bbox_pred=bbox_pred, bbox_feats=bbox_feats)
+            cls_score=cls_score,
+            mid_cls_score=mid_cls_score,
+            mid_det_score=mid_det_score,
+            bbox_pred=bbox_pred,
+            bbox_feats=bbox_feats)
         return bbox_results
 
     def _bbox_forward_train(self, x, sampling_results, gt_bboxes, gt_labels,
@@ -137,7 +141,10 @@ class MMStandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
         bbox_targets = self.bbox_head.get_targets(sampling_results, gt_bboxes,
                                                   gt_labels, self.train_cfg)
         loss_bbox = self.bbox_head.loss(bbox_results['cls_score'],
-                                        bbox_results['bbox_pred'], rois,
+                                        bbox_results['bbox_pred'], 
+                                        bbox_results['mid_cls_score'],
+                                        bbox_results['mid_det_score'],
+                                        rois,
                                         *bbox_targets, num_per_img=self.train_cfg.sampler.num, **kwargs)
 
         bbox_results.update(loss_bbox=loss_bbox)
