@@ -107,7 +107,7 @@ class XMLDataset(CustomDataset):
         bboxes_ignore = []
         labels_ignore = []
         for obj in root.findall('tag'):
-            name = obj.find('name').text
+            name = obj.text
             if name not in self.CLASSES:
                 continue
             label = self.cat2label[name]

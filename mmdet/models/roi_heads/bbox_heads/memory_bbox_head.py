@@ -278,14 +278,14 @@ class MMBBoxHead(BaseModule):
              label_weights,
              bbox_targets,
              bbox_weights,
-             reduction_override=None,
              num_per_img=512,
              gt_tags=None,
+             reduction_override=None,
              **kwargs):
         losses = dict()
         split_list = [num_per_img] * (cls_score.size(0) // num_per_img)
         det_logit = torch.cat([torch.softmax(sc, dim=0) for sc in mid_det_score.split(split_list)], dim=0)
-        cls_logit = torch.softmax(mid_cls_score, dim=-1)
+        cls_logit = torch.softmax(cls_score[:, :-1], dim=-1)
         img_label = self.generate_img_label(self.num_classes, gt_tags, labels.device)
         mid_score = det_logit * cls_logit
         tag_score = torch.cat([ms.sum(dim=0)[None, :] for ms in mid_score.split(split_list)], dim=0)

@@ -202,10 +202,12 @@ class TwoStageDetector(BaseDetector):
                       gt_masks=None,
                       proposals=None,
                       **kwargs):
+        gt_tags = kwargs.pop('gt_tags')
         label_img, unlabel_img = img[:len(img) // 2], img[len(img) // 2:]
         label_img_metas, unlabel_img_metas = img_metas[:len(img_metas) // 2], img_metas[len(img_metas) // 2:]
         label_gt_bboxes, unlabel_gt_bboxes = gt_bboxes[:len(gt_bboxes) // 2], gt_bboxes[len(gt_bboxes) // 2:]
         label_gt_labels, unlabel_gt_labels = gt_labels[:len(gt_labels) // 2], gt_labels[len(gt_labels) // 2:]
+        label_gt_tags, unlabel_gt_tags = gt_tags[:len(gt_tags) // 2], gt_tags[len(gt_tags) // 2:]
         label_type2weight = self.train_cfg.label_type2weight
 
         losses = dict()
@@ -238,12 +240,17 @@ class TwoStageDetector(BaseDetector):
 
         roi_losses = self.roi_head.forward_train(label_x, label_img_metas, proposal_list,
                                                  label_gt_bboxes, label_gt_labels,
-                                                 gt_bboxes_ignore, gt_masks,
+                                                 gt_bboxes_ignore, gt_masks, label_gt_tags,
                                                  **kwargs)
-        roi_losses = self.roi_head.forward_train(unlabel_x, unlabel_img_metas, un_proposal_list,
+        un_roi_losses = self.roi_head.forward_train(unlabel_x, unlabel_img_metas, un_proposal_list,
                                                  unlabel_gt_bboxes, unlabel_gt_labels,
-                                                 gt_bboxes_ignore, gt_masks,
+                                                 gt_bboxes_ignore, gt_masks, unlabel_gt_tags,
                                                  **kwargs)
+        for k in roi_losses.keys():
+            if k == 'acc':
+                roi_losses[k] += un_roi_losses[k]
+                roi_losses[k] /= 2
+            roi_losses[k] += un_roi_losses[k] * label_type2weight[1]
         losses.update(roi_losses)
 
         return losses

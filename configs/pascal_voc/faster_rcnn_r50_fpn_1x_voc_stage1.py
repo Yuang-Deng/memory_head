@@ -1,6 +1,7 @@
 _base_ = [
     '../_base_/models/faster_rcnn_r50_fpn.py', '../_base_/datasets/vocstage1.py',
-    '../_base_/default_runtime.py'
+    '../_base_/schedules/schedule_1x.py',
+    '../_base_/default_runtime.py',
 ]
 data_root = '/home/qiucm/workspace/dataset/VOCdevkit/'
 data = dict(
@@ -21,7 +22,7 @@ model = dict(
     ),
 )
 # optimizer
-optimizer = dict(type='SGD', lr=0.001, momentum=0.9, weight_decay=0.0001)
+optimizer = dict(type='SGD', lr=0.0025, momentum=0.9, weight_decay=0.0001)
 optimizer_config = dict(grad_clip=None)
 # learning policy
 # actual epoch = 3 * 3 = 9

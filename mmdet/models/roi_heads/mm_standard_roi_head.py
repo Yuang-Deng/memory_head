@@ -59,6 +59,7 @@ class MMStandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
                       gt_labels,
                       gt_bboxes_ignore=None,
                       gt_masks=None,
+                      gt_tags=None,
                       **kwargs):
         """
         Args:
@@ -103,7 +104,7 @@ class MMStandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
         if self.with_bbox:
             bbox_results = self._bbox_forward_train(x, sampling_results,
                                                     gt_bboxes, gt_labels,
-                                                    img_metas, **kwargs)
+                                                    img_metas, gt_tags, **kwargs)
             losses.update(bbox_results['loss_bbox'])
 
         # mask head forward and loss
@@ -133,7 +134,7 @@ class MMStandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
         return bbox_results
 
     def _bbox_forward_train(self, x, sampling_results, gt_bboxes, gt_labels,
-                            img_metas, **kwargs):
+                            img_metas, gt_tags, **kwargs):
         """Run forward function and calculate loss for box head in training."""
         rois = bbox2roi([res.bboxes for res in sampling_results])
         bbox_results = self._bbox_forward(x, rois)
@@ -145,7 +146,9 @@ class MMStandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
                                         bbox_results['mid_cls_score'],
                                         bbox_results['mid_det_score'],
                                         rois,
-                                        *bbox_targets, num_per_img=self.train_cfg.sampler.num, **kwargs)
+                                        *bbox_targets, 
+                                        self.train_cfg.sampler.num, 
+                                        gt_tags, **kwargs)
 
         bbox_results.update(loss_bbox=loss_bbox)
         return bbox_results

@@ -7,6 +7,7 @@ from matplotlib.collections import PatchCollection
 from matplotlib.patches import Polygon
 
 from ..utils import mask2ndarray
+plt.switch_backend('agg')
 
 EPS = 1e-2
 
