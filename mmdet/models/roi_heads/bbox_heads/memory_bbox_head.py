@@ -267,7 +267,13 @@ class MMBBoxHead(BaseModule):
                 img_label[i, tag] = 1
         return img_label.to(device)
 
-    @force_fp32(apply_to=('cls_score', 'bbox_pred'))
+    def generate_img_label_single(self, num_classes, labels, device):
+        img_label = torch.zeros(num_classes)
+        img_label[labels.long()] = 1
+        img_label[0] = 0
+        return img_label.to(device)
+
+    @force_fp32(apply_to=('cls_score', 'bbox_pred', 'mid_cls_score', 'mid_det_score'))
     def loss(self,
              cls_score,
              bbox_pred,
@@ -284,16 +290,41 @@ class MMBBoxHead(BaseModule):
              **kwargs):
         losses = dict()
         split_list = [num_per_img] * (cls_score.size(0) // num_per_img)
+
         det_logit = torch.cat([torch.softmax(sc, dim=0) for sc in mid_det_score.split(split_list)], dim=0)
-        cls_logit = torch.softmax(cls_score[:, :-1], dim=-1)
+        cls_logit = torch.softmax(mid_cls_score, dim=-1)
         img_label = self.generate_img_label(self.num_classes, gt_tags, labels.device)
         mid_score = det_logit * cls_logit
         tag_score = torch.cat([ms.sum(dim=0)[None, :] for ms in mid_score.split(split_list)], dim=0)
-        image_level_scores = torch.clamp(tag_score, min=0.0, max=1.0)
-        losses['loss_mid'] = (F.binary_cross_entropy(image_level_scores, img_label, reduction="sum") / img_label.size(0)) * self.loss_mid_weight
-        # losses['loss_mid'] = - ((img_label * torch.log(tag_score) + (1 - img_label) * torch.log(1 - tag_score)).sum() / img_label.size(0)) * self.loss_mid_weight
+        image_level_scores = torch.clamp(tag_score, min=1e-5, max=1.0 - 1e-5)
+        # losses['loss_mid'] = (F.binary_cross_entropy(image_level_scores, img_label, reduction="sum") / img_label.size(0)) * self.loss_mid_weight
+        
+        losses['loss_mid'] = - ((img_label * torch.log(image_level_scores) + (1 - img_label) * torch.log(1 - image_level_scores)).sum() / img_label.size(0)) * self.loss_mid_weight
+        
         # losses['loss_mid'] = - ((one_hot_label * torch.log(mid_score)).sum() / cls_score.size(0)) * self.loss_mid_weight
         # print(losses['loss_mid'])
+
+        # img_score = F.softmax(mid_cls_score, dim=1)
+        # img_det_list = mid_det_score.split(split_list)
+        # final_det_score = []
+        # for det_score_per_imgs in img_det_list:
+        #     det_score_per_imgs = F.softmax(det_score_per_imgs, dim=0)
+        #     final_det_score.append(det_score_per_imgs)
+        # final_det_score = torch.cat(final_det_score, dim=0)
+        # device = img_score.device
+        # num_classes = img_score.shape[1]
+        # final_score = img_score * final_det_score
+        # final_score_list = final_score.split(split_list)
+        # for idx, (final_score_per_im, targets_per_im) in enumerate(zip(final_score_list, gt_tags)):
+        #     labels_per_im = self.generate_img_label_single(num_classes, targets_per_im, device)
+        #     score_per_im = torch.clamp(torch.sum(final_score_per_im, dim=0), min=1e-5, max=1)
+        #     loss_img = F.binary_cross_entropy(score_per_im, labels_per_im, reduction="sum")
+        #     if 'loss_img' in losses.keys():
+        #         losses['loss_img'] += loss_img
+        #     else:
+        #         losses['loss_img'] = loss_img
+        # losses['loss_img'] = (losses['loss_img'] / len(split_list)) * self.loss_mid_weight
+
         if cls_score is not None:
             avg_factor = max(torch.sum(label_weights > 0).float().item(), 1.)
             if cls_score.numel() > 0:
