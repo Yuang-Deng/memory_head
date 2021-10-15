@@ -279,6 +279,7 @@ class MMBBoxHead(BaseModule):
              bbox_pred,
              mid_cls_score,
              mid_det_score,
+             split_list,
              rois,
              labels,
              label_weights,
@@ -289,7 +290,7 @@ class MMBBoxHead(BaseModule):
              reduction_override=None,
              **kwargs):
         losses = dict()
-        split_list = [num_per_img] * (cls_score.size(0) // num_per_img)
+        # split_list = [num_per_img] * (cls_score.size(0) // num_per_img)
 
         det_logit = torch.cat([torch.softmax(sc, dim=0) for sc in mid_det_score.split(split_list)], dim=0)
         cls_logit = torch.softmax(mid_cls_score, dim=-1)

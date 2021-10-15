@@ -9,16 +9,26 @@ data = dict(
     workers_per_gpu=2,
 )
 model = dict(
+    rpn_head=dict(
+        anchor_generator=dict(
+            scales=[8,16,32]
+        )
+    ),
     roi_head=dict(
         type='MMStandardRoIHead',
         bbox_head=dict(
             type='MMShared2FCBBoxHead',
             num_classes=20,
-            loss_mid_weight=0.1,
+            loss_mid_weight=0,
         )
     ),
     train_cfg=dict(
         label_type2weight=[1,2,2],
+        rcnn=dict(
+            sampler=dict(
+                num=256,
+            )
+        )
     ),
 )
 # optimizer
