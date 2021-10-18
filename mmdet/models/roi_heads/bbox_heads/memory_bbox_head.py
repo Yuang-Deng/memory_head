@@ -60,6 +60,7 @@ class MMBBoxHead(BaseModule):
         self.loss_cls = build_loss(loss_cls)
         self.loss_bbox = build_loss(loss_bbox)
 
+
         in_channels = self.in_channels
         if self.with_avg_pool:
             self.avg_pool = nn.AvgPool2d(self.roi_feat_size)
@@ -298,6 +299,7 @@ class MMBBoxHead(BaseModule):
         mid_score = det_logit * cls_logit
         tag_score = torch.cat([ms.sum(dim=0)[None, :] for ms in mid_score.split(split_list)], dim=0)
         image_level_scores = torch.clamp(tag_score, min=1e-5, max=1.0 - 1e-5)
+        # image_level_scores = tag_score
         # losses['loss_mid'] = (F.binary_cross_entropy(image_level_scores, img_label, reduction="sum") / img_label.size(0)) * self.loss_mid_weight
         
         losses['loss_mid'] = - ((img_label * torch.log(image_level_scores) + (1 - img_label) * torch.log(1 - image_level_scores)).sum() / img_label.size(0)) * self.loss_mid_weight
