@@ -1,5 +1,6 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 import torch.nn as nn
+import torch
 from mmcv.cnn import ConvModule
 
 from mmdet.models.builder import HEADS
@@ -31,6 +32,7 @@ class MMConvFCBBoxHead(MMBBoxHead):
                  conv_cfg=None,
                  norm_cfg=None,
                  init_cfg=None,
+                 memory_k=32768,
                  *args,
                  **kwargs):
         super(MMConvFCBBoxHead, self).__init__(
@@ -53,6 +55,12 @@ class MMConvFCBBoxHead(MMBBoxHead):
         self.fc_out_channels = fc_out_channels
         self.conv_cfg = conv_cfg
         self.norm_cfg = norm_cfg
+        
+        # self.queue_vector = self.register_buffer("queue_vector", torch.randn(49, memory_k)) 
+        # self.queue_vector = nn.functional.normalize(self.queue_vector, dim=0)
+        # self.queue_lable = self.register_buffer("queue_lable", torch.ones(size=[memory_k]))
+
+        self.register_buffer("queue_ptr", torch.zeros(1, dtype=torch.long))
 
         # add shared convs and fcs
         self.shared_convs, self.shared_fcs, last_layer_dim = \
