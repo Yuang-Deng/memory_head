@@ -156,6 +156,19 @@ class TwoStageDetector(BaseDetector):
         else:
             return self._stage1_forward_train(img, img_metas, gt_bboxes, gt_labels, gt_bboxes_ignore,
                          gt_masks, proposals, **kwargs)
+    @torch.no_grad()
+    def forward_mem(self,
+                      img,
+                      img_metas,
+                      gt_bboxes,
+                      gt_labels,
+                      gt_bboxes_ignore=None,
+                      gt_masks=None,
+                      proposals=None,
+                      **kwargs):
+        x = self.extract_feat(img)
+
+        self.roi_head.mem_forward(x, gt_bboxes, gt_labels)
 
     def _stage1_forward_train(self,
                       img,
@@ -251,7 +264,9 @@ class TwoStageDetector(BaseDetector):
                 roi_losses[k] += un_roi_losses[k]
                 roi_losses[k] /= 2
             roi_losses[k] += un_roi_losses[k] * label_type2weight[1]
+        roi_losses['loss_mem_cls'] = un_roi_losses['loss_mem_cls'] * label_type2weight[1]
         losses.update(roi_losses)
+        # losses.update(un_roi_losses['loss_mem_cls'] * label_type2weight[1])
 
         return losses
 

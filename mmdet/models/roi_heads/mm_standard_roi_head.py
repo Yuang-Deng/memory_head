@@ -4,12 +4,21 @@ import torch
 from mmdet.core import bbox2result, bbox2roi, build_assigner, build_sampler
 from ..builder import HEADS, build_head, build_roi_extractor
 from .base_roi_head import BaseRoIHead
+from .mm_base_roi_head import MMBaseRoIHead
 from .test_mixins import BBoxTestMixin, MaskTestMixin
+import torch.nn.functional as F
 
 
 @HEADS.register_module()
-class MMStandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
+class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
     """Simplest base roi head including one bbox head and one mask head."""
+
+    def init_mem_bank(self):
+        self.register_buffer("queue_vector", torch.randn(self.memory_k, 12544)) 
+        self.queue_vector = F.normalize(self.queue_vector, dim=0)
+        self.register_buffer("queue_label", torch.ones(size=[self.memory_k]).long())
+
+        self.register_buffer("queue_ptr", torch.zeros(1, dtype=torch.long))
 
     def init_assigner_sampler(self):
         """Initialize assigner and sampler."""
@@ -50,6 +59,83 @@ class MMStandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
             mask_results = self._mask_forward(x, mask_rois)
             outs = outs + (mask_results['mask_pred'], )
         return outs
+
+    @torch.no_grad()
+    def concat_all_gather(self, features, labels):
+        """
+        Performs all_gather operation on the provided tensors.
+        *** Warning ***: torch.distributed.all_gather has no gradient.
+        """
+        device = features.device
+        local_batch = torch.tensor(features.shape[0]).to(device)
+        batch_size_gather = [torch.ones((1)).to(device)
+            for _ in range(torch.distributed.get_world_size())]
+        torch.distributed.all_gather(batch_size_gather, local_batch.float(), async_op=False)
+        
+        batch_size_gather = [int(bs.item()) for bs in batch_size_gather]
+
+        max_batch = max(batch_size_gather)
+        size = (max_batch, features.size(1))
+        temp_features = torch.zeros(max_batch - local_batch, features.size(1)).to(device)
+        features = torch.cat([features, temp_features])
+
+        # size = (int(tensors_gather[0].item()), features.size(1))
+        # (int(tensors_gather[i].item()), features.size(1))
+        features_gather = [torch.ones(size).to(device)
+            for _ in range(torch.distributed.get_world_size())]
+        torch.distributed.all_gather(features_gather, features, async_op=False)
+
+        features_gather = [f[:bs, :] for bs, f in zip(batch_size_gather, features_gather)]
+
+        features = torch.cat(features_gather, dim=0)
+
+        temp_labels = torch.zeros(max_batch - local_batch).to(device)
+        labels = torch.cat([labels, temp_labels])
+
+        labels_gather = [torch.ones(max_batch).to(device)
+            for i in range(torch.distributed.get_world_size())]
+        torch.distributed.all_gather(labels_gather, labels, async_op=False)
+
+        labels_gather = [l[:bs] for bs, l in zip(batch_size_gather, labels_gather)]
+
+        labels = torch.cat(labels_gather, dim=0)
+
+        return features, labels
+
+    @torch.no_grad()
+    def _dequeue_and_enqueue(self, features, labels):
+        # gather keys before updating queue
+        features, labels = self.concat_all_gather(features, labels)
+        # labels = self.concat_all_gather(labels)
+
+        batch_size = features.shape[0]
+
+        ptr = int(self.queue_ptr)
+
+        # replace the keys at ptr (dequeue and enqueue)
+        if ptr + batch_size >= self.memory_k:
+            redundant = ptr + batch_size - self.memory_k
+            self.queue_vector[ptr:self.memory_k, :] = features.view(batch_size, -1)[:batch_size - redundant]
+            self.queue_vector[:redundant, :] = features.view(batch_size, -1)[batch_size - redundant:]
+            self.queue_label[ptr:self.memory_k] = labels[:batch_size - redundant]
+            self.queue_label[:redundant] = labels[batch_size - redundant:]
+        else:
+            self.queue_vector[ptr:ptr + batch_size, :] = features.view(batch_size, -1)
+            self.queue_label[ptr:ptr + batch_size] = labels
+        ptr = (ptr + batch_size) % self.memory_k  # move pointer
+
+        self.queue_ptr[0] = ptr
+    
+    def mem_forward(self,
+                      x,
+                      gt_bboxes,
+                      gt_labels,):
+        rois = bbox2roi([res for res in gt_bboxes])
+        bbox_feats = self.bbox_roi_extractor(
+            x[:self.bbox_roi_extractor.num_inputs], rois)
+        mem_gt_label = torch.cat(gt_labels)
+        mem_bbox_feats = bbox_feats.view(bbox_feats.size(0), -1)
+        self._dequeue_and_enqueue(mem_bbox_feats, mem_gt_label)
 
     def forward_train(self,
                       x,
@@ -102,9 +188,14 @@ class MMStandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
         losses = dict()
         # bbox head forward and loss
         if self.with_bbox:
-            bbox_results = self._bbox_forward_train(x, sampling_results,
-                                                    gt_bboxes, gt_labels,
-                                                    img_metas, gt_tags, **kwargs)
+            if '_' in img_metas[0]['ori_filename']:
+                bbox_results = self._unalbel_bbox_forward_train(x, sampling_results,
+                                                        gt_bboxes, gt_labels,
+                                                        img_metas, gt_tags, **kwargs)
+            else:
+                bbox_results = self._bbox_forward_train(x, sampling_results,
+                                                        gt_bboxes, gt_labels,
+                                                        img_metas, gt_tags, **kwargs)
             losses.update(bbox_results['loss_bbox'])
 
         # mask head forward and loss
@@ -133,26 +224,116 @@ class MMStandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
             bbox_feats=bbox_feats)
         return bbox_results
 
+    def _unlabel_bbox_forward(self, x, rois, labels):
+        """Box head forward function used in both training and testing."""
+        # TODO: a more flexible way to decide which feature maps to use
+        pos_inds = (labels >= 0) & (labels < self.bbox_head.num_classes)
+        bbox_feats = self.bbox_roi_extractor(
+            x[:self.bbox_roi_extractor.num_inputs], rois)
+        if self.with_shared_head:
+            bbox_feats = self.shared_head(bbox_feats)
+
+        pos_labels = labels[pos_inds]
+        pos_bbox_feats = bbox_feats[pos_inds].view(pos_labels.size(0), -1)
+
+        # cos_sim = torch.dot(pos_bbox_feats, self.queue_vector.T)
+        # vector_norm = F.normalize(pos_bbox_feats)
+        # memory_norm = F.normalize(self.queue_vector)
+        # cos_sim = vector_norm.mm(memory_norm.T)
+
+        # cos_sim = torch.cosine_similarity(pos_bbox_feats, self.queue_vector, dim=1)
+
+        dot_sum = torch.einsum('ik,jk->ij', [pos_bbox_feats, self.queue_vector])
+        vector_norm = torch.norm(pos_bbox_feats, dim=-1, p=2)
+        memory_norm = torch.norm(self.queue_vector, dim=-1, p=2)
+        norm_mul = torch.einsum('i,j->ij', [vector_norm, memory_norm])
+        cos_sim = (dot_sum / norm_mul) * 0.5 + 0.5
+
+        add_inds = torch.zeros(0).to(pos_labels.device).long()
+        for i in range(pos_labels.size(0)):
+            neg_inds = self.queue_label != pos_labels[i]
+            _, neg_inds = torch.topk(cos_sim[i][neg_inds], self.top_k, largest=False)
+            add_inds = torch.cat([add_inds, neg_inds])
+        add_inds = torch.unique(add_inds)
+        add_feat = self.queue_vector[add_inds].view(add_inds.size(0), bbox_feats.size(1), bbox_feats.size(2), bbox_feats.size(3))
+        add_label = self.queue_label[add_inds]
+
+        cls_score, mid_cls_score, mid_det_score, bbox_pred = self.bbox_head(bbox_feats)
+        add_cls_score, _, _, _ = self.bbox_head(add_feat)
+
+        bbox_results = dict(
+            cls_score=cls_score,
+            mid_cls_score=mid_cls_score,
+            mid_det_score=mid_det_score,
+            bbox_pred=bbox_pred,
+            bbox_feats=bbox_feats,
+            add_cls_score=add_cls_score,
+            add_label=add_label)
+        return bbox_results
+
+    def _unalbel_bbox_forward_train(self, x, sampling_results, gt_bboxes, gt_labels,
+                            img_metas, gt_tags, **kwargs):
+        """Run forward function and calculate loss for box head in training."""
+        rois = bbox2roi([res.bboxes for res in sampling_results])
+        bbox_targets = self.bbox_head.get_targets(sampling_results, gt_bboxes,
+                                                  gt_labels, self.train_cfg)
+        bbox_results = self._unlabel_bbox_forward(x, rois, bbox_targets[0])
+        split_list = [sr.bboxes.size(0) for sr in sampling_results]
+        loss_bbox = self.bbox_head.loss(bbox_results['cls_score'],
+                                            bbox_results['bbox_pred'],
+                                            bbox_results['mid_cls_score'],
+                                            bbox_results['mid_det_score'],
+                                            split_list,
+                                            rois,
+                                            *bbox_targets,
+                                            self.train_cfg.sampler.num,
+                                            gt_tags, **kwargs)
+        loss_mem_cls = self.bbox_head.mem_loss(bbox_results['add_cls_score'],
+                                                bbox_results['add_label'],
+                                                )
+        loss_bbox['loss_mem_cls'] = loss_mem_cls['loss_cls']
+        bbox_results.update(loss_bbox=loss_bbox)
+        # bbox_results.update(loss_mem_cls=loss_mem_cls)
+
+        return bbox_results
+
     def _bbox_forward_train(self, x, sampling_results, gt_bboxes, gt_labels,
                             img_metas, gt_tags, **kwargs):
         """Run forward function and calculate loss for box head in training."""
         rois = bbox2roi([res.bboxes for res in sampling_results])
-        bbox_results = self._bbox_forward(x, rois)
-
         bbox_targets = self.bbox_head.get_targets(sampling_results, gt_bboxes,
                                                   gt_labels, self.train_cfg)
+        bbox_results = self._bbox_forward(x, rois)
         split_list = [sr.bboxes.size(0) for sr in sampling_results]
         loss_bbox = self.bbox_head.loss(bbox_results['cls_score'],
-                                        bbox_results['bbox_pred'], 
-                                        bbox_results['mid_cls_score'],
-                                        bbox_results['mid_det_score'],
-                                        split_list,
-                                        rois,
-                                        *bbox_targets, 
-                                        self.train_cfg.sampler.num, 
-                                        gt_tags, **kwargs)
+                                            bbox_results['bbox_pred'],
+                                            bbox_results['mid_cls_score'],
+                                            bbox_results['mid_det_score'],
+                                            split_list,
+                                            rois,
+                                            *bbox_targets,
+                                            self.train_cfg.sampler.num,
+                                            gt_tags, **kwargs)
 
         bbox_results.update(loss_bbox=loss_bbox)
+
+        # TODO add memory head
+        # device = bbox_results['cls_score'].device
+        # batch = self.train_cfg.sampler.num
+        # # gt_feat_ind = torch.zeros([bbox_results['cls_score'].size(0)]).to(device)
+        # mem_gt_feat_ind = torch.zeros([0]).to(device)
+        # mem_gt_label = torch.zeros([0]).to(device)
+        # for i, res in enumerate(sampling_results):
+        #     mem_gt_feat_ind = torch.cat([(torch.nonzero(res.pos_is_gt) + (i * batch)).view(-1), mem_gt_feat_ind])
+        #     mem_gt_label = torch.cat([res.pos_gt_labels[torch.nonzero(res.pos_is_gt).long()].view(-1), mem_gt_label])
+        #     # gt_feat_ind[i * batch:i * batch + len(res.pos_is_gt)] = res.pos_is_gt
+        # mem_gt_feat = bbox_results['bbox_feats'][mem_gt_feat_ind.long()]
+
+        # unique_label = mem_gt_label.unique()
+        # mem_gt_feat = mem_gt_feat.view(mem_gt_feat.size(0), -1)
+
+        # self._dequeue_and_enqueue(mem_gt_feat, mem_gt_label)
+
         return bbox_results
 
     def _mask_forward_train(self, x, sampling_results, bbox_feats, gt_masks,

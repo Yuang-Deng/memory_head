@@ -6,6 +6,7 @@ from mmcv.cnn import ConvModule
 from mmdet.models.builder import HEADS
 from mmdet.models.utils import build_linear_layer
 from .memory_bbox_head import MMBBoxHead
+import torch.nn.functional as F
 
 
 @HEADS.register_module()
@@ -55,13 +56,10 @@ class MMConvFCBBoxHead(MMBBoxHead):
         self.fc_out_channels = fc_out_channels
         self.conv_cfg = conv_cfg
         self.norm_cfg = norm_cfg
+
+        # self.memory_k = memory_k
+        # self.init_mem_bank(memory_k=memory_k)
         
-        # self.queue_vector = self.register_buffer("queue_vector", torch.randn(49, memory_k)) 
-        # self.queue_vector = nn.functional.normalize(self.queue_vector, dim=0)
-        # self.queue_lable = self.register_buffer("queue_lable", torch.ones(size=[memory_k]))
-
-        self.register_buffer("queue_ptr", torch.zeros(1, dtype=torch.long))
-
         # add shared convs and fcs
         self.shared_convs, self.shared_fcs, last_layer_dim = \
             self._add_conv_fc_branch(
@@ -131,6 +129,13 @@ class MMConvFCBBoxHead(MMBBoxHead):
                         dict(name='reg_fcs')
                     ])
             ]
+    
+    # def init_mem_bank(self, memory_k, dim=1024):
+    #     self.register_buffer("queue_vector", torch.randn(dim, memory_k)) 
+    #     self.queue_vector = F.normalize(self.queue_vector, dim=0)
+    #     self.register_buffer("queue_lable", torch.ones(size=[memory_k]))
+
+    #     self.register_buffer("queue_ptr", torch.zeros(1, dtype=torch.long))
 
     def _add_conv_fc_branch(self,
                             num_branch_convs,
@@ -172,6 +177,84 @@ class MMConvFCBBoxHead(MMBBoxHead):
                     nn.Linear(fc_in_channels, self.fc_out_channels))
             last_layer_dim = self.fc_out_channels
         return branch_convs, branch_fcs, last_layer_dim
+
+    def forward_mem(self, x):
+        if self.num_shared_convs > 0:
+            for conv in self.shared_convs:
+                x = conv(x)
+
+        if self.num_shared_fcs > 0:
+            if self.with_avg_pool:
+                x = self.avg_pool(x)
+
+            x = x.flatten(1)
+
+            for fc in self.shared_fcs:
+                x = self.relu(fc(x))
+
+        x_cls = x
+        x_mid_cls = x
+        x_mid_det = x
+
+        for conv in self.cls_convs:
+            x_cls = conv(x_cls)
+        if x_cls.dim() > 2:
+            if self.with_avg_pool:
+                x_cls = self.avg_pool(x_cls)
+            x_cls = x_cls.flatten(1)
+        for fc in self.cls_fcs:
+            x_cls = self.relu(fc(x_cls))
+
+        for conv in self.mid_cls_convs:
+            x_mid_cls = conv(x_mid_cls)
+        if x_mid_cls.dim() > 2:
+            if self.with_avg_pool:
+                x_mid_cls = self.avg_pool(x_mid_cls)
+            x_mid_cls = x_mid_cls.flatten(1)
+        for fc in self.mid_cls_fcs:
+            x_mid_cls = self.relu(fc(x_mid_cls))
+
+        for conv in self.mid_det_convs:
+            x_mid_det = conv(x_mid_det)
+        if x_mid_det.dim() > 2:
+            if self.with_avg_pool:
+                x_mid_det = self.avg_pool(x_mid_det)
+            x_mid_det = x_mid_det.flatten(1)
+        for fc in self.mid_det_fcs:
+            x_mid_det = self.relu(fc(x_mid_det))
+
+        cls_score, mid_cls_score, mid_det_score = self.fc_cls(x_cls), self.fc_mid_cls(x_mid_cls), self.fc_mid_det(x_mid_det) if self.with_cls else None
+        return cls_score
+    
+    # @torch.no_grad()
+    # def concat_all_gather(tensor):
+    #     """
+    #     Performs all_gather operation on the provided tensors.
+    #     *** Warning ***: torch.distributed.all_gather has no gradient.
+    #     """
+    #     tensors_gather = [torch.ones_like(tensor)
+    #         for _ in range(torch.distributed.get_world_size())]
+    #     torch.distributed.all_gather(tensors_gather, tensor, async_op=False)
+
+    #     output = torch.cat(tensors_gather, dim=0)
+    #     return output
+
+    # @torch.no_grad()
+    # def _dequeue_and_enqueue(self, features, labels):
+    #     # gather keys before updating queue
+    #     features = self.concat_all_gather(features)
+    #     labels = self.concat_all_gather(labels)
+
+    #     batch_size = features.shape[0]
+
+    #     ptr = int(self.queue_ptr)
+
+    #     # replace the keys at ptr (dequeue and enqueue)
+    #     self.queue_vector[:, ptr:ptr + batch_size] = features
+    #     self.queue_lable[:, ptr:ptr + batch_size] = labels
+    #     ptr = (ptr + batch_size) % self.K  # move pointer
+
+    #     self.queue_ptr[0] = ptr
 
     def forward(self, x):
         # shared part

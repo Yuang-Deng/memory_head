@@ -10,7 +10,7 @@ from mmcv.runner import (HOOKS, DistSamplerSeedHook, EpochBasedRunner,
                          build_runner)
 from mmcv.utils import build_from_cfg
 
-from mmdet.core import DistEvalHook, EvalHook
+from mmdet.core import DistEvalHook, EvalHook, DistMEMHook, MEMHook
 from mmdet.datasets import (build_dataloader, build_dataset,
                             replace_ImageToTensor)
 from mmdet.utils import get_root_logger
@@ -41,6 +41,7 @@ def train_detector(model,
                    distributed=False,
                    validate=False,
                    timestamp=None,
+                   mem=True,
                    meta=None):
     logger = get_root_logger(log_level=cfg.log_level)
 
@@ -152,6 +153,19 @@ def train_detector(model,
         # priority of IterTimerHook has been modified from 'NORMAL' to 'LOW'.
         runner.register_hook(
             eval_hook(val_dataloader, **eval_cfg), priority='LOW')
+    
+    if mem:
+        mem_dataset = build_dataset(cfg.data.mem)
+        mem_dataloader = build_dataloader(
+            mem_dataset,
+            samples_per_gpu=cfg.data.samples_per_gpu,
+            workers_per_gpu=cfg.data.workers_per_gpu,
+            num_gpus=len(cfg.gpu_ids),
+            dist=distributed,
+            shuffle=False)
+        mem_hook = DistMEMHook if distributed else MEMHook
+        runner.register_hook(
+            mem_hook(mem_dataloader), priority='LOW')
 
     # user-defined hooks
     if cfg.get('custom_hooks', None):

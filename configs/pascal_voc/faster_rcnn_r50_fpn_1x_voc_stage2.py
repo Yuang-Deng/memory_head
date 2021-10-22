@@ -6,7 +6,7 @@ _base_ = [
 data_root = '/home/qiucm/workspace/dataset/VOCdevkit/'
 data = dict(
     samples_per_gpu=4,
-    workers_per_gpu=8,
+    workers_per_gpu=0,
 )
 model = dict(
     roi_head=dict(
@@ -15,7 +15,9 @@ model = dict(
             type='MMShared2FCBBoxHead',
             num_classes=20,
             loss_mid_weight=0.1,
-        )
+        ),
+        memory_k=12613,
+        top_k=32,
     ),
     train_cfg=dict(
         label_type2weight=[1,2,2],

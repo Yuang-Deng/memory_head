@@ -39,6 +39,7 @@ class MMBBoxHead(BaseModule):
                  loss_bbox=dict(
                      type='SmoothL1Loss', beta=1.0, loss_weight=1.0),
                  loss_mid_weight=1,
+                 loss_mem_cls_weight=1,
                  init_cfg=None):
         super(MMBBoxHead, self).__init__(init_cfg)
         assert with_cls or with_reg
@@ -55,6 +56,7 @@ class MMBBoxHead(BaseModule):
         self.cls_predictor_cfg = cls_predictor_cfg
         self.fp16_enabled = False
         self.loss_mid_weight = loss_mid_weight
+        self.loss_mem_cls_weight = loss_mem_cls_weight
 
         self.bbox_coder = build_bbox_coder(bbox_coder)
         self.loss_cls = build_loss(loss_cls)
@@ -374,6 +376,29 @@ class MMBBoxHead(BaseModule):
                     reduction_override=reduction_override)
             else:
                 losses['loss_bbox'] = bbox_pred[pos_inds].sum()
+        return losses
+
+    @force_fp32(apply_to=('cls_score', 'bbox_pred', 'mid_cls_score', 'mid_det_score'))
+    def mem_loss(self,
+             cls_score,
+             labels,
+             reduction_override=None,
+             **kwargs):
+        losses = dict()
+        label_weights = torch.ones_like(labels)
+        if cls_score is not None:
+            avg_factor = labels.size(0)
+            if cls_score.numel() > 0:
+                loss_cls_ = self.loss_cls(
+                    cls_score,
+                    labels,
+                    label_weights,
+                    avg_factor=avg_factor,
+                    reduction_override=reduction_override)
+                if isinstance(loss_cls_, dict):
+                    losses.update(loss_cls_)
+                else:
+                    losses['loss_cls'] = loss_cls_ * self.loss_mem_cls_weight
         return losses
 
     @force_fp32(apply_to=('cls_score', 'bbox_pred'))
