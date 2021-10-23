@@ -139,7 +139,7 @@ CUTOUT = iaa.Cutout(nb_iterations=(1, 5), size=[0, 0.2], squared=True)
 
 @PIPELINES.register_module()
 class STACTransform:
-    def __init__(self, aug_type='strong', magnitude=6, weighted_inbox_selection=False):
+    def __init__(self, aug_type='strong', magnitude=6, weighted_inbox_selection=False, mode='common'):
         self.affine_aug_op = AFFINE_TRANSFORM
         self.inbox_affine_aug_op = AFFINE_TRANSFORM_WEAK
         self.cutout_op = CUTOUT
@@ -147,6 +147,7 @@ class STACTransform:
         self.weighted_inbox_selection = weighted_inbox_selection
         self.affine_ops = []
         self.aug_type = aug_type
+        self.mode = mode
 
         self.strong_augment_fn = [[self.color_augment],
                                [self.bbox_affine_transform, self.affine_transform],
@@ -154,6 +155,9 @@ class STACTransform:
         # self.augment_fn = [[self.color_augment],
                                # [self.affine_transform],
                             #    [self.cutout_augment]]
+        # self.mem_augment_fn = [[self.color_augment],
+        #                        [self.bbox_affine_transform, self.affine_transform],
+        #                        [self.cutout_augment]]
         self.default_augment_fn = []
 
     def cutout_augment(self, image, bounding_box=None):
@@ -210,7 +214,10 @@ class STACTransform:
         if '_' in results['img_info']['filename']:
             augment_fn = self.strong_augment_fn
         else:
-            augment_fn = self.default_augment_fn
+            if self.mode == 'mem':
+                pass
+            else:
+                augment_fn = self.default_augment_fn
         if len(augment_fn
                ) > 0 and augment_fn[-1][0].__name__ == 'cutout_augment':
             # put cutout in the last always

@@ -14,7 +14,8 @@ model = dict(
         bbox_head=dict(
             type='MMShared2FCBBoxHead',
             num_classes=20,
-            loss_mid_weight=0.1,
+            loss_mid_weight=0,
+            loss_mem_cls_weight=5,
         ),
         memory_k=12613,
         top_k=32,

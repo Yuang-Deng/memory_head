@@ -378,7 +378,7 @@ class MMBBoxHead(BaseModule):
                 losses['loss_bbox'] = bbox_pred[pos_inds].sum()
         return losses
 
-    @force_fp32(apply_to=('cls_score', 'bbox_pred', 'mid_cls_score', 'mid_det_score'))
+    @force_fp32(apply_to=('cls_score',))
     def mem_loss(self,
              cls_score,
              labels,

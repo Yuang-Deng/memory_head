@@ -252,13 +252,14 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
         add_inds = torch.zeros(0).to(pos_labels.device).long()
         for i in range(pos_labels.size(0)):
             neg_inds = self.queue_label != pos_labels[i]
-            _, neg_inds = torch.topk(cos_sim[i][neg_inds], self.top_k, largest=False)
+            _, neg_inds = torch.topk(cos_sim[i][neg_inds], self.top_k)
             add_inds = torch.cat([add_inds, neg_inds])
         add_inds = torch.unique(add_inds)
         add_feat = self.queue_vector[add_inds].view(add_inds.size(0), bbox_feats.size(1), bbox_feats.size(2), bbox_feats.size(3))
         add_label = self.queue_label[add_inds]
 
         cls_score, mid_cls_score, mid_det_score, bbox_pred = self.bbox_head(bbox_feats)
+
         add_cls_score, _, _, _ = self.bbox_head(add_feat)
 
         bbox_results = dict(
@@ -318,21 +319,21 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
         bbox_results.update(loss_bbox=loss_bbox)
 
         # TODO add memory head
-        # device = bbox_results['cls_score'].device
-        # batch = self.train_cfg.sampler.num
-        # # gt_feat_ind = torch.zeros([bbox_results['cls_score'].size(0)]).to(device)
-        # mem_gt_feat_ind = torch.zeros([0]).to(device)
-        # mem_gt_label = torch.zeros([0]).to(device)
-        # for i, res in enumerate(sampling_results):
-        #     mem_gt_feat_ind = torch.cat([(torch.nonzero(res.pos_is_gt) + (i * batch)).view(-1), mem_gt_feat_ind])
-        #     mem_gt_label = torch.cat([res.pos_gt_labels[torch.nonzero(res.pos_is_gt).long()].view(-1), mem_gt_label])
-        #     # gt_feat_ind[i * batch:i * batch + len(res.pos_is_gt)] = res.pos_is_gt
-        # mem_gt_feat = bbox_results['bbox_feats'][mem_gt_feat_ind.long()]
+        device = bbox_results['cls_score'].device
+        batch = self.train_cfg.sampler.num
+        # gt_feat_ind = torch.zeros([bbox_results['cls_score'].size(0)]).to(device)
+        mem_gt_feat_ind = torch.zeros([0]).to(device)
+        mem_gt_label = torch.zeros([0]).to(device)
+        for i, res in enumerate(sampling_results):
+            mem_gt_feat_ind = torch.cat([(torch.nonzero(res.pos_is_gt) + (i * batch)).view(-1), mem_gt_feat_ind])
+            mem_gt_label = torch.cat([res.pos_gt_labels[torch.nonzero(res.pos_is_gt).long()].view(-1), mem_gt_label])
+            # gt_feat_ind[i * batch:i * batch + len(res.pos_is_gt)] = res.pos_is_gt
+        mem_gt_feat = bbox_results['bbox_feats'][mem_gt_feat_ind.long()]
 
-        # unique_label = mem_gt_label.unique()
-        # mem_gt_feat = mem_gt_feat.view(mem_gt_feat.size(0), -1)
+        unique_label = mem_gt_label.unique()
+        mem_gt_feat = mem_gt_feat.view(mem_gt_feat.size(0), -1)
 
-        # self._dequeue_and_enqueue(mem_gt_feat, mem_gt_label)
+        self._dequeue_and_enqueue(mem_gt_feat, mem_gt_label)
 
         return bbox_results
 
