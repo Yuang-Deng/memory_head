@@ -40,6 +40,8 @@ class MMBBoxHead(BaseModule):
                      type='SmoothL1Loss', beta=1.0, loss_weight=1.0),
                  loss_mid_weight=1,
                  loss_mem_cls_weight=1,
+                 loss_sim_weight=1,
+                 sim_target=-0.3,
                  init_cfg=None):
         super(MMBBoxHead, self).__init__(init_cfg)
         assert with_cls or with_reg
@@ -57,6 +59,8 @@ class MMBBoxHead(BaseModule):
         self.fp16_enabled = False
         self.loss_mid_weight = loss_mid_weight
         self.loss_mem_cls_weight = loss_mem_cls_weight
+        self.loss_sim_weight = loss_sim_weight
+        self.sim_target = sim_target
 
         self.bbox_coder = build_bbox_coder(bbox_coder)
         self.loss_cls = build_loss(loss_cls)
@@ -382,6 +386,7 @@ class MMBBoxHead(BaseModule):
     def mem_loss(self,
              cls_score,
              labels,
+             sims,
              reduction_override=None,
              **kwargs):
         losses = dict()
@@ -400,7 +405,12 @@ class MMBBoxHead(BaseModule):
                 if isinstance(loss_cls_, dict):
                     losses.update(loss_cls_)
                 else:
-                    losses['loss_cls'] = loss_cls_ * self.loss_mem_cls_weight
+                    losses['loss_mem_cls'] = loss_cls_ * self.loss_mem_cls_weight
+        
+        if sims is not None:
+            target_sim = torch.ones_like(sims).to(sims.device) * self.sim_target
+            losses['loss_sim_loss'] = torch.maximum(sims - target_sim, torch.zeros_like(sims)).mean() * self.loss_sim_weight
+
         return losses
 
     @force_fp32(apply_to=('cls_score', 'bbox_pred'))

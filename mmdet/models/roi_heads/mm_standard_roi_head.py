@@ -362,11 +362,10 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
                                             gt_tags, **kwargs)
 
         loss_mem_cls = self.bbox_head.mem_loss(bbox_results['add_cls_score'],
-                                                bbox_results['add_label'],)
+                                                bbox_results['add_label'],
+                                                bbox_results['add_sim'])
 
-        loss_bbox['loss_mem_cls'] = loss_mem_cls['loss_cls']
-
-        loss_bbox['sim_loss'] = torch.maximum(bbox_results['add_sim'], target_sim).mean() * 1
+        loss_bbox.update(loss_mem_cls)
 
         bbox_results.update(loss_bbox=loss_bbox)
 
@@ -397,7 +396,7 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
         return bbox_results
 
     def interpolation_feature_augment(self, anchors, features):
-        rand_intp = (torch.rand(features.size(0), features.size(1)) / 10 * 3 + 0.6).to(anchors.device)
+        rand_intp = (torch.rand(features.size(0), features.size(1)) / 10 * self.intp_band + self.intp_base).to(anchors.device)
         # rand_intp = rand_intp.expand(anchors.size(0), features.size(1), features.size(2))
         anchors = anchors.expand(features.size(0), features.size(1))
         return anchors * (1 - rand_intp) + features * rand_intp
