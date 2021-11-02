@@ -1,6 +1,5 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 import torch
-from torch.functional import split
 
 from mmdet.core import bbox2result, bbox2roi, build_assigner, build_sampler
 from ..builder import HEADS, build_head, build_roi_extractor
@@ -8,17 +7,16 @@ from .base_roi_head import BaseRoIHead
 from .mm_base_roi_head import MMBaseRoIHead
 from .test_mixins import BBoxTestMixin, MaskTestMixin
 import torch.nn.functional as F
-from numpy import random
 
 
 @HEADS.register_module()
-class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
+class DynamicMMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
     """Simplest base roi head including one bbox head and one mask head."""
 
     def init_mem_bank(self):
         self.register_buffer("queue_vector", torch.randn(self.memory_k, 12544)) 
         self.queue_vector = F.normalize(self.queue_vector, dim=0)
-        self.register_buffer("queue_label", torch.ones(size=[self.memory_k]).long() * 30)
+        self.register_buffer("queue_label", torch.ones(size=[self.memory_k]).long())
 
         self.register_buffer("queue_ptr", torch.zeros(1, dtype=torch.long))
 
@@ -69,8 +67,7 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
         *** Warning ***: torch.distributed.all_gather has no gradient.
         """
         device = features.device
-        assert labels.size(0) != 0
-        local_batch = torch.tensor(labels.size(0)).to(device)
+        local_batch = torch.tensor(features.size(0)).to(device)
         batch_size_gather = [torch.ones((1)).to(device)
             for _ in range(torch.distributed.get_world_size())]
         torch.distributed.all_gather(batch_size_gather, local_batch.float(), async_op=False)
@@ -96,7 +93,7 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
         labels = torch.cat([labels, temp_labels])
 
         labels_gather = [torch.ones(max_batch).to(device)
-            for _ in range(torch.distributed.get_world_size())]
+            for i in range(torch.distributed.get_world_size())]
         torch.distributed.all_gather(labels_gather, labels, async_op=False)
 
         labels_gather = [l[:bs] for bs, l in zip(batch_size_gather, labels_gather)]
@@ -111,15 +108,15 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
         features, labels = self.concat_all_gather(features, labels)
         # labels = self.concat_all_gather(labels)
 
-        batch_size = features.size(0)
+        batch_size = features.shape[0]
 
         ptr = int(self.queue_ptr)
 
         # replace the keys at ptr (dequeue and enqueue)
         if ptr + batch_size >= self.memory_k:
             redundant = ptr + batch_size - self.memory_k
-            self.queue_vector[ptr:self.memory_k, :] = features.view(batch_size, -1)[:batch_size - redundant]
-            self.queue_vector[:redundant, :] = features.view(batch_size, -1)[batch_size - redundant:]
+            self.queue_vector[ptr:self.memory_k, :] = features.view(batch_size, -1)[:batch_size - redundant, :]
+            self.queue_vector[:redundant, :] = features.view(batch_size, -1)[batch_size - redundant:, :]
             self.queue_label[ptr:self.memory_k] = labels[:batch_size - redundant]
             self.queue_label[:redundant] = labels[batch_size - redundant:]
         else:
@@ -199,6 +196,7 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
                 bbox_results = self._bbox_forward_train(x, sampling_results,
                                                         gt_bboxes, gt_labels,
                                                         img_metas, gt_tags, **kwargs)
+                self.dynamic_mem_adjust(bbox_results=bbox_results, sampling_results=sampling_results)
             losses.update(bbox_results['loss_bbox'])
 
         # mask head forward and loss
@@ -239,6 +237,13 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
         pos_labels = labels[pos_inds]
         pos_bbox_feats = bbox_feats[pos_inds].view(pos_labels.size(0), -1)
 
+        # cos_sim = torch.dot(pos_bbox_feats, self.queue_vector.T)
+        # vector_norm = F.normalize(pos_bbox_feats)
+        # memory_norm = F.normalize(self.queue_vector)
+        # cos_sim = vector_norm.mm(memory_norm.T)
+
+        # cos_sim = torch.cosine_similarity(pos_bbox_feats, self.queue_vector, dim=1)
+
         dot_sum = torch.einsum('ik,jk->ij', [pos_bbox_feats, self.queue_vector])
         vector_norm = torch.norm(pos_bbox_feats, dim=-1, p=2)
         memory_norm = torch.norm(self.queue_vector, dim=-1, p=2)
@@ -246,16 +251,10 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
         cos_sim = (dot_sum / norm_mul) * 0.5 + 0.5
 
         add_inds = torch.zeros(0).to(pos_labels.device).long()
-        split_inds = []
-        add_sim = torch.zeros(0,self.top_k).to(pos_labels.device)
-        
         for i in range(pos_labels.size(0)):
-            neg_cls_inds = self.queue_label != pos_labels[i]
-            _, neg_inds = torch.topk(cos_sim[i][neg_cls_inds], self.top_k)
-            add_sim = torch.cat([add_sim, cos_sim[i][neg_cls_inds][neg_inds][None,:]])
-            # print(cos_sim[i][neg_cls_inds][neg_inds][None,:])
+            neg_inds = self.queue_label != pos_labels[i]
+            _, neg_inds = torch.topk(cos_sim[i][neg_inds], self.top_k)
             add_inds = torch.cat([add_inds, neg_inds])
-            split_inds.append(neg_inds)
         add_inds = torch.unique(add_inds)
         add_feat = self.queue_vector[add_inds].view(add_inds.size(0), bbox_feats.size(1), bbox_feats.size(2), bbox_feats.size(3))
         add_label = self.queue_label[add_inds]
@@ -264,78 +263,12 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
 
         add_cls_score, _, _, _ = self.bbox_head(add_feat)
 
-        anchor_add_label = torch.cat([self.queue_label[ind][None, :] for ind in split_inds])
-        add_feat = torch.cat([self.queue_vector[ind][None, :, :] for ind in split_inds])
-
-
         bbox_results = dict(
             cls_score=cls_score,
             mid_cls_score=mid_cls_score,
             mid_det_score=mid_det_score,
             bbox_pred=bbox_pred,
             bbox_feats=bbox_feats,
-            fg_anchor=pos_bbox_feats,
-            anchor_add_label=anchor_add_label,
-            add_feat=add_feat,
-            add_sim=add_sim,
-            add_cls_score=add_cls_score,
-            add_label=add_label)
-        return bbox_results
-    
-    def _unlabel_interp_bbox_forward(self, x, rois, labels):
-        """Box head forward function used in both training and testing."""
-        # TODO: a more flexible way to decide which feature maps to use
-        pos_inds = (labels >= 0) & (labels < self.bbox_head.num_classes)
-        bbox_feats = self.bbox_roi_extractor(
-            x[:self.bbox_roi_extractor.num_inputs], rois)
-        if self.with_shared_head:
-            bbox_feats = self.shared_head(bbox_feats)
-
-        pos_labels = labels[pos_inds]
-        pos_bbox_feats = bbox_feats[pos_inds].view(pos_labels.size(0), -1)
-
-        dot_sum = torch.einsum('ik,jk->ij', [pos_bbox_feats, self.queue_vector])
-        vector_norm = torch.norm(pos_bbox_feats, dim=-1, p=2)
-        memory_norm = torch.norm(self.queue_vector, dim=-1, p=2)
-        norm_mul = torch.einsum('i,j->ij', [vector_norm, memory_norm])
-        cos_sim = dot_sum / norm_mul
-
-        add_sim = torch.zeros(0, self.top_k).to(pos_labels.device)
-        add_label = torch.zeros(0).to(pos_labels.device).long()
-        add_feat = torch.zeros(0, self.queue_vector.size(1)).to(pos_labels.device)
-        
-        for i in range(pos_labels.size(0)):
-            neg_cls_inds = (self.queue_label != pos_labels[i]) & (self.queue_label != 30)
-            _, neg_inds = torch.topk(cos_sim[i][neg_cls_inds], self.top_k)
-            add_sim = torch.cat([add_sim, cos_sim[i][neg_cls_inds][neg_inds][None,:]])
-            cur_interp_feat = self.interpolation_feature_augment(bbox_feats[i].view(1, -1), self.queue_vector[neg_inds])
-            add_feat = torch.cat([add_feat, cur_interp_feat], dim=0)
-            add_label = torch.cat([add_label, self.queue_label[neg_inds]])
-            # print(cos_sim[i][neg_cls_inds][neg_inds][None,:])
-        
-        # neg_cls_inds = (self.queue_label == ) & (self.queue_label != 30)
-
-        # add_feat = self.queue_vector[add_inds].view(add_inds.size(0), bbox_feats.size(1), bbox_feats.size(2), bbox_feats.size(3))
-        # add_label = self.queue_label[add_inds]
-
-        cls_score, mid_cls_score, mid_det_score, bbox_pred = self.bbox_head(bbox_feats)
-
-        add_cls_score, _, _, _ = self.bbox_head(add_feat.view(add_feat.size(0), bbox_feats.size(1), bbox_feats.size(2), bbox_feats.size(3)))
-
-        # anchor_add_label = torch.cat([self.queue_label[ind][None, :] for ind in split_inds])
-        # add_feat = torch.cat([self.queue_vector[ind][None, :, :] for ind in split_inds])
-
-
-        bbox_results = dict(
-            cls_score=cls_score,
-            mid_cls_score=mid_cls_score,
-            mid_det_score=mid_det_score,
-            bbox_pred=bbox_pred,
-            bbox_feats=bbox_feats,
-            fg_anchor=pos_bbox_feats,
-            # anchor_add_label=anchor_add_label,
-            add_feat=add_feat,
-            add_sim=add_sim,
             add_cls_score=add_cls_score,
             add_label=add_label)
         return bbox_results
@@ -346,11 +279,8 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
         rois = bbox2roi([res.bboxes for res in sampling_results])
         bbox_targets = self.bbox_head.get_targets(sampling_results, gt_bboxes,
                                                   gt_labels, self.train_cfg)
-        bbox_results = self._unlabel_interp_bbox_forward(x, rois, bbox_targets[0])
+        bbox_results = self._unlabel_bbox_forward(x, rois, bbox_targets[0])
         split_list = [sr.bboxes.size(0) for sr in sampling_results]
-        
-        target_sim = torch.zeros_like(bbox_results['add_sim'])
-
         loss_bbox = self.bbox_head.loss(bbox_results['cls_score'],
                                             bbox_results['bbox_pred'],
                                             bbox_results['mid_cls_score'],
@@ -360,15 +290,12 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
                                             *bbox_targets,
                                             self.train_cfg.sampler.num,
                                             gt_tags, **kwargs)
-
         loss_mem_cls = self.bbox_head.mem_loss(bbox_results['add_cls_score'],
-                                                bbox_results['add_label'],)
-
+                                                bbox_results['add_label'],
+                                                )
         loss_bbox['loss_mem_cls'] = loss_mem_cls['loss_cls']
-
-        loss_bbox['sim_loss'] = torch.maximum(bbox_results['add_sim'], target_sim).mean() * 1
-
         bbox_results.update(loss_bbox=loss_bbox)
+        # bbox_results.update(loss_mem_cls=loss_mem_cls)
 
         return bbox_results
 
@@ -391,34 +318,25 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
                                             gt_tags, **kwargs)
 
         bbox_results.update(loss_bbox=loss_bbox)
-        
-        # self.dynamic_mem_adjust(bbox_results, sampling_results)
 
         return bbox_results
-
-    def interpolation_feature_augment(self, anchors, features):
-        rand_intp = (torch.rand(features.size(0), features.size(1)) / 10 * 3 + 0.6).to(anchors.device)
-        # rand_intp = rand_intp.expand(anchors.size(0), features.size(1), features.size(2))
-        anchors = anchors.expand(features.size(0), features.size(1))
-        return anchors * (1 - rand_intp) + features * rand_intp
-
-        return features
     
     def dynamic_mem_adjust(self, bbox_results, sampling_results):
         # TODO add memory head
         device = bbox_results['cls_score'].device
         batch = self.train_cfg.sampler.num
         # gt_feat_ind = torch.zeros([bbox_results['cls_score'].size(0)]).to(device)
-        mem_gt_feat_ind = torch.zeros([0]).to(device)
-        mem_gt_label = torch.zeros([0]).to(device)
+        mem_gt_feat_ind = torch.zeros([0]).to(device).long()
+        mem_gt_label = torch.zeros([0]).to(device).long()
         for i, res in enumerate(sampling_results):
             mem_gt_feat_ind = torch.cat([(torch.nonzero(res.pos_is_gt) + (i * batch)).view(-1), mem_gt_feat_ind])
             mem_gt_label = torch.cat([res.pos_gt_labels[torch.nonzero(res.pos_is_gt).long()].view(-1), mem_gt_label])
             # gt_feat_ind[i * batch:i * batch + len(res.pos_is_gt)] = res.pos_is_gt
-        mem_gt_feat = bbox_results['bbox_feats'][mem_gt_feat_ind.long()]
+        mem_gt_feat = bbox_results['bbox_feats'][mem_gt_feat_ind]
 
         mem_gt_feat = mem_gt_feat.view(mem_gt_feat.size(0), -1)
 
+        print(mem_gt_feat.size(0), mem_gt_label.size(0))
         self._dequeue_and_enqueue(mem_gt_feat, mem_gt_label)
 
     def _mask_forward_train(self, x, sampling_results, bbox_feats, gt_masks,

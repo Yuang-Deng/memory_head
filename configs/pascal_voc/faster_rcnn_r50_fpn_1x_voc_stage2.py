@@ -15,9 +15,9 @@ model = dict(
             type='MMShared2FCBBoxHead',
             num_classes=20,
             loss_mid_weight=0,
-            loss_mem_cls_weight=5,
+            loss_mem_cls_weight=0.2,
         ),
-        memory_k=12613,
+        memory_k=15827,
         top_k=32,
     ),
     train_cfg=dict(

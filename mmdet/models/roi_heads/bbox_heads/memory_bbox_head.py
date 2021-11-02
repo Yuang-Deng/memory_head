@@ -385,7 +385,8 @@ class MMBBoxHead(BaseModule):
              reduction_override=None,
              **kwargs):
         losses = dict()
-        label_weights = torch.ones_like(labels)
+        label_weights = torch.ones_like(labels).to(labels.device)
+        assert labels.size(0) == cls_score.size(0) == labels.size(0)
         if cls_score is not None:
             avg_factor = labels.size(0)
             if cls_score.numel() > 0:
@@ -395,6 +396,7 @@ class MMBBoxHead(BaseModule):
                     label_weights,
                     avg_factor=avg_factor,
                     reduction_override=reduction_override)
+                # print(loss_cls_)
                 if isinstance(loss_cls_, dict):
                     losses.update(loss_cls_)
                 else:

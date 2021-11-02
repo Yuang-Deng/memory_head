@@ -165,7 +165,7 @@ def train_detector(model,
             shuffle=False)
         mem_hook = DistMEMHook if distributed else MEMHook
         runner.register_hook(
-            mem_hook(mem_dataloader), priority='LOW')
+            mem_hook(mem_dataloader, start=1, interval=1), priority='LOW')
 
     # user-defined hooks
     if cfg.get('custom_hooks', None):

@@ -264,7 +264,10 @@ class TwoStageDetector(BaseDetector):
                 roi_losses[k] += un_roi_losses[k]
                 roi_losses[k] /= 2
             roi_losses[k] += un_roi_losses[k] * label_type2weight[1]
-        roi_losses['loss_mem_cls'] = un_roi_losses['loss_mem_cls'] * label_type2weight[1]
+        for k in un_roi_losses.keys():
+            if k not in roi_losses.keys():
+                roi_losses[k] = 0
+                roi_losses[k] += un_roi_losses[k] * label_type2weight[1]
         losses.update(roi_losses)
         # losses.update(un_roi_losses['loss_mem_cls'] * label_type2weight[1])
 
