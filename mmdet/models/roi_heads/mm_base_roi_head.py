@@ -20,8 +20,9 @@ class MMBaseRoIHead(BaseModule, metaclass=ABCMeta):
                  pretrained=None,
                  init_cfg=None,
                  memory_k=12613,
-                 intp_base=0.5,
-                 intp_band=0.3,
+                 intp_base=0,
+                 intp_band=1,
+                 warm_epoch=5,
                  top_k=16):
         super(MMBaseRoIHead, self).__init__(init_cfg)
         self.train_cfg = train_cfg
@@ -30,6 +31,7 @@ class MMBaseRoIHead(BaseModule, metaclass=ABCMeta):
         self.top_k = top_k
         self.intp_base = intp_base
         self.intp_band = intp_band
+        self.warm_epoch = warm_epoch
         if shared_head is not None:
             shared_head.pretrained = pretrained
             self.shared_head = build_shared_head(shared_head)

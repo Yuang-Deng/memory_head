@@ -40,6 +40,7 @@ class MMBBoxHead(BaseModule):
                      type='SmoothL1Loss', beta=1.0, loss_weight=1.0),
                  loss_mid_weight=1,
                  loss_mem_cls_weight=1,
+                 loss_mem_box_weight=1,
                  loss_sim_weight=1,
                  sim_target=-0.3,
                  init_cfg=None):
@@ -59,6 +60,7 @@ class MMBBoxHead(BaseModule):
         self.fp16_enabled = False
         self.loss_mid_weight = loss_mid_weight
         self.loss_mem_cls_weight = loss_mem_cls_weight
+        self.loss_mem_box_weight = loss_mem_box_weight
         self.loss_sim_weight = loss_sim_weight
         self.sim_target = sim_target
 
@@ -298,9 +300,16 @@ class MMBBoxHead(BaseModule):
              **kwargs):
         losses = dict()
         # split_list = [num_per_img] * (cls_score.size(0) // num_per_img)
+        bg_class_ind = self.num_classes
+        # 0~self.num_classes-1 are FG, self.num_classes is BG
+        pos_inds = (labels >= 0) & (labels < bg_class_ind)
+        # mid_cls_score = mid_cls_score[pos_inds]
+        # mid_det_score = mid_det_score[pos_inds]
 
-        det_logit = torch.cat([torch.softmax(sc, dim=0) for sc in mid_det_score.split(split_list)], dim=0)
-        cls_logit = torch.softmax(mid_cls_score, dim=-1)
+        det_logit = [torch.softmax(sc[ind], dim=0) for sc, ind in zip(mid_det_score.split(split_list), pos_inds.split(split_list))]
+        split_list = [dl.size(0) for dl in det_logit]
+        det_logit = torch.cat(det_logit, dim=0)
+        cls_logit = torch.softmax(mid_cls_score[pos_inds], dim=-1)
         img_label = self.generate_img_label(self.num_classes, gt_tags, labels.device)
         mid_score = det_logit * cls_logit
         tag_score = torch.cat([ms.sum(dim=0)[None, :] for ms in mid_score.split(split_list)], dim=0)
@@ -385,7 +394,9 @@ class MMBBoxHead(BaseModule):
     @force_fp32(apply_to=('cls_score',))
     def mem_loss(self,
              cls_score,
+             bbox_pred,
              labels,
+             bboxes,
              sims,
              reduction_override=None,
              **kwargs):
@@ -406,6 +417,19 @@ class MMBBoxHead(BaseModule):
                     losses.update(loss_cls_)
                 else:
                     losses['loss_mem_cls'] = loss_cls_ * self.loss_mem_cls_weight
+        if bbox_pred is not None:
+            pos_bbox_pred = bbox_pred.view(
+                bbox_pred.size(0), -1,
+                4)
+            inds = torch.arange(0, bboxes.size(0), 1)
+            bbox_weights = torch.ones_like(pos_bbox_pred[inds, labels[inds]])
+            bbox_target = torch.zeros_like(bbox_weights)
+            losses['loss_mem_bbox'] = self.loss_bbox(
+                pos_bbox_pred[inds, labels[inds]],
+                bbox_target,
+                bbox_weights,
+                avg_factor=bboxes.size(0),
+                reduction_override=reduction_override) * self.loss_mem_box_weight
         
         if sims is not None:
             target_sim = torch.ones_like(sims).to(sims.device) * self.sim_target

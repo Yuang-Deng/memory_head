@@ -33,7 +33,6 @@ class MMConvFCBBoxHead(MMBBoxHead):
                  conv_cfg=None,
                  norm_cfg=None,
                  init_cfg=None,
-                 memory_k=32768,
                  *args,
                  **kwargs):
         super(MMConvFCBBoxHead, self).__init__(

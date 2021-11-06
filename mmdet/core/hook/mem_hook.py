@@ -72,8 +72,21 @@ class MEMHook(Hook):
             runner.model.train_step(data)
 
     def before_train_epoch(self, runner):
-        if self._should_mem_forward:
+        if self._should_mem_forward(runner):
             self._mem_forward(runner)
+            if hasattr(runner.model.module.roi_head, 'mem_weight_init'):
+                # in case the data loader uses `SequentialSampler` in Pytorch
+                runner.model.module.roi_head.mem_weight_init()
+        if hasattr(runner.model.module.roi_head, 'set_epoch'):
+            # in case the data loader uses `SequentialSampler` in Pytorch
+            runner.model.module.roi_head.set_epoch(runner.epoch)
+        
+    def before_iter(self, runner):
+        if self._should_mem_forward(runner):
+            if hasattr(runner.model.module.roi_head, 'mem_weight_update'):
+                # in case the data loader uses `SequentialSampler` in Pytorch
+                runner.model.module.roi_head.mem_weight_update()
+        
 
 
 

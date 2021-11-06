@@ -154,6 +154,19 @@ def train_detector(model,
         runner.register_hook(
             eval_hook(val_dataloader, **eval_cfg), priority='LOW')
     
+    # if mem and 'MMStandardRoIHead' == cfg.model.roi_head.type:
+    #     mem_dataset = build_dataset(cfg.data.mem)
+    #     mem_dataloader = build_dataloader(
+    #         mem_dataset,
+    #         samples_per_gpu=cfg.data.samples_per_gpu,
+    #         workers_per_gpu=cfg.data.workers_per_gpu,
+    #         num_gpus=len(cfg.gpu_ids),
+    #         dist=distributed,
+    #         shuffle=False)
+    #     mem_hook = DistMEMHook if distributed else MEMHook
+    #     runner.register_hook(
+    #         mem_hook(mem_dataloader, start=cfg.model.roi_head.warm_epoch, interval=1), priority='LOW')
+        
     if mem:
         mem_dataset = build_dataset(cfg.data.mem)
         mem_dataloader = build_dataloader(
@@ -165,7 +178,7 @@ def train_detector(model,
             shuffle=False)
         mem_hook = DistMEMHook if distributed else MEMHook
         runner.register_hook(
-            mem_hook(mem_dataloader, start=1, interval=1), priority='LOW')
+            mem_hook(mem_dataloader, start=cfg.model.roi_head.warm_epoch, interval=1), priority='LOW')
 
     # user-defined hooks
     if cfg.get('custom_hooks', None):

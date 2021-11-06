@@ -168,6 +168,17 @@ class TwoStageDetector(BaseDetector):
                       **kwargs):
         x = self.extract_feat(img)
 
+        # proposal_cfg = self.train_cfg.get('rpn_proposal',
+        #                                       self.test_cfg.rpn)
+
+        # rpn_losses, proposal_list = self.rpn_head.forward_train(
+        #         x,
+        #         img_metas,
+        #         gt_bboxes,
+        #         gt_labels=None,
+        #         gt_bboxes_ignore=gt_bboxes_ignore,
+        #         proposal_cfg=proposal_cfg)
+
         self.roi_head.mem_forward(x, gt_bboxes, gt_labels)
 
     def _stage1_forward_train(self,
