@@ -124,32 +124,6 @@ class TwoStageDetector(BaseDetector):
         Returns:
             dict[str, Tensor]: a dictionary of loss components
         """
-        # x = self.extract_feat(img)
-
-        # losses = dict()
-
-        # # RPN forward and loss
-        # if self.with_rpn:
-        #     proposal_cfg = self.train_cfg.get('rpn_proposal',
-        #                                       self.test_cfg.rpn)
-        #     rpn_losses, proposal_list = self.rpn_head.forward_train(
-        #         x,
-        #         img_metas,
-        #         gt_bboxes,
-        #         gt_labels=None,
-        #         gt_bboxes_ignore=gt_bboxes_ignore,
-        #         proposal_cfg=proposal_cfg)
-        #     losses.update(rpn_losses)
-        # else:
-        #     proposal_list = proposals
-
-        # roi_losses = self.roi_head.forward_train(x, img_metas, proposal_list,
-        #                                          gt_bboxes, gt_labels,
-        #                                          gt_bboxes_ignore, gt_masks,
-        #                                          **kwargs)
-        # losses.update(roi_losses)
-
-        # return losses
         if '_' not in img_metas[0]['ori_filename'] and '_' in img_metas[-1]['ori_filename'] and 'train_mod' in self.train_cfg and self.train_cfg.train_mod=='ssod':
             return self._stage2_forward_train(img, img_metas, gt_bboxes, gt_labels, gt_bboxes_ignore,
                          gt_masks, proposals, **kwargs)
@@ -209,6 +183,9 @@ class TwoStageDetector(BaseDetector):
         else:
             proposal_list = proposals
 
+        if 'saug' in kwargs.keys():
+            x_saug = self.extract_feat(kwargs['saug']['img'])
+            kwargs['x_saug'] = x_saug
         roi_losses = self.roi_head.forward_train(x, img_metas, proposal_list,
                                                  gt_bboxes, gt_labels,
                                                  gt_bboxes_ignore, gt_masks,

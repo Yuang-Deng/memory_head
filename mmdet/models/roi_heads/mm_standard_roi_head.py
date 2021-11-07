@@ -1,5 +1,7 @@
 # Copyright (c) OpenMMLab. All rights reserved.
+from re import S
 import torch
+from torch._C import wait
 from torch.functional import split
 
 from mmdet.core import bbox2result, bbox2roi, build_assigner, build_sampler
@@ -19,10 +21,9 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
 
         self.mem_fc = torch.nn.Sequential(torch.nn.Linear(12544, 1024), torch.nn.ReLU(), torch.nn.Linear(1024, 128))
         self.fwd_fc = torch.nn.Sequential(torch.nn.Linear(12544, 1024), torch.nn.ReLU(), torch.nn.Linear(1024, 128))
-        self.m = 0.999
 
-        self.register_buffer("queue_vector", torch.randn(self.memory_k, 12544)) 
-        self.queue_vector = F.normalize(self.queue_vector, dim=0)
+        self.register_buffer("queue_vector", torch.randn(self.memory_k, 128)) 
+        self.queue_vector = F.normalize(self.queue_vector, dim=1)
         self.register_buffer("queue_label", torch.ones(self.memory_k).long() * 0)
         self.register_buffer("queue_boxes", torch.ones(self.memory_k, 4).long())
 
@@ -163,6 +164,9 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
         mem_gt_label = torch.cat(gt_labels)
         mem_gt_boxes = torch.cat(gt_bboxes)
         mem_bbox_feats = bbox_feats.view(bbox_feats.size(0), -1)
+        with torch.no_grad():
+            mem_bbox_feats = self.fwd_fc(mem_bbox_feats)
+            mem_bbox_feats = F.normalize(mem_bbox_feats, dim=1)
         self._dequeue_and_enqueue(mem_bbox_feats.detach(), mem_gt_label.detach(), mem_gt_boxes.detach())
 
     def forward_train(self,
@@ -216,14 +220,19 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
         losses = dict()
         # bbox head forward and loss
         if self.with_bbox:
-            if '_' in img_metas[0]['ori_filename'] and self.cur_epoch >= self.warm_epoch:
-                bbox_results = self._unalbel_bbox_forward_train(x, sampling_results,
+            bbox_results = self._unalbel_bbox_forward_train(x, sampling_results,
                                                         gt_bboxes, gt_labels,
                                                         img_metas, gt_tags, **kwargs)
-            else:
-                bbox_results = self._bbox_forward_train(x, sampling_results,
-                                                        gt_bboxes, gt_labels,
-                                                        img_metas, gt_tags, **kwargs)
+
+            # if '_' in img_metas[0]['ori_filename'] and self.cur_epoch >= self.warm_epoch:
+            #     bbox_results = self._unalbel_bbox_forward_train(x, sampling_results,
+            #                                             gt_bboxes, gt_labels,
+            #                                             img_metas, gt_tags, **kwargs)
+            # else:
+            #     bbox_results = self._bbox_forward_train(x, sampling_results,
+            #                                             gt_bboxes, gt_labels,
+            #                                             img_metas, gt_tags, **kwargs)
+
             losses.update(bbox_results['loss_bbox'])
 
         # mask head forward and loss
@@ -250,61 +259,6 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
             mid_det_score=mid_det_score,
             bbox_pred=bbox_pred,
             bbox_feats=bbox_feats)
-        return bbox_results
-
-    def _unlabel_bbox_forward(self, x, rois, labels):
-        """Box head forward function used in both training and testing."""
-        # TODO: a more flexible way to decide which feature maps to use
-        pos_inds = (labels >= 0) & (labels < self.bbox_head.num_classes)
-        bbox_feats = self.bbox_roi_extractor(
-            x[:self.bbox_roi_extractor.num_inputs], rois)
-        if self.with_shared_head:
-            bbox_feats = self.shared_head(bbox_feats)
-
-        pos_labels = labels[pos_inds]
-        pos_bbox_feats = bbox_feats[pos_inds].view(pos_labels.size(0), -1)
-
-        dot_sum = torch.einsum('ik,jk->ij', [pos_bbox_feats, self.queue_vector])
-        vector_norm = torch.norm(pos_bbox_feats, dim=-1, p=2)
-        memory_norm = torch.norm(self.queue_vector, dim=-1, p=2)
-        norm_mul = torch.einsum('i,j->ij', [vector_norm, memory_norm])
-        cos_sim = (dot_sum / norm_mul) * 0.5 + 0.5
-
-        add_inds = torch.zeros(0).to(pos_labels.device).long()
-        split_inds = []
-        add_sim = torch.zeros(0,self.top_k).to(pos_labels.device)
-        
-        for i in range(pos_labels.size(0)):
-            neg_cls_inds = self.queue_label != pos_labels[i]
-            _, neg_inds = torch.topk(cos_sim[i][neg_cls_inds], self.top_k)
-            add_sim = torch.cat([add_sim, cos_sim[i][neg_cls_inds][neg_inds][None,:]])
-            # print(cos_sim[i][neg_cls_inds][neg_inds][None,:])
-            add_inds = torch.cat([add_inds, neg_inds])
-            split_inds.append(neg_inds)
-        add_inds = torch.unique(add_inds)
-        add_feat = self.queue_vector[add_inds].view(add_inds.size(0), bbox_feats.size(1), bbox_feats.size(2), bbox_feats.size(3))
-        add_label = self.queue_label[add_inds]
-
-        cls_score, mid_cls_score, mid_det_score, bbox_pred = self.bbox_head(bbox_feats)
-
-        add_cls_score, _, _, _ = self.bbox_head(add_feat)
-
-        anchor_add_label = torch.cat([self.queue_label[ind][None, :] for ind in split_inds])
-        add_feat = torch.cat([self.queue_vector[ind][None, :, :] for ind in split_inds])
-
-
-        bbox_results = dict(
-            cls_score=cls_score,
-            mid_cls_score=mid_cls_score,
-            mid_det_score=mid_det_score,
-            bbox_pred=bbox_pred,
-            bbox_feats=bbox_feats,
-            fg_anchor=pos_bbox_feats,
-            anchor_add_label=anchor_add_label,
-            add_feat=add_feat,
-            add_sim=add_sim,
-            add_cls_score=add_cls_score,
-            add_label=add_label)
         return bbox_results
     
     def _unlabel_interp_bbox_forward(self, x, rois, labels):
@@ -340,20 +294,10 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
             add_feat = torch.cat([add_feat, cur_interp_feat], dim=0)
             add_label = torch.cat([add_label, self.queue_label[neg_inds]])
             add_boxes = torch.cat([add_boxes, self.queue_boxes[neg_inds]])
-            # print(cos_sim[i][neg_cls_inds][neg_inds][None,:])
-        
-        # neg_cls_inds = (self.queue_label == ) & (self.queue_label != 30)
-
-        # add_feat = self.queue_vector[add_inds].view(add_inds.size(0), bbox_feats.size(1), bbox_feats.size(2), bbox_feats.size(3))
-        # add_label = self.queue_label[add_inds]
 
         cls_score, mid_cls_score, mid_det_score, bbox_pred = self.bbox_head(bbox_feats)
 
         add_cls_score, _, _, add_bbox_pred = self.bbox_head(add_feat.view(add_feat.size(0), bbox_feats.size(1), bbox_feats.size(2), bbox_feats.size(3)))
-
-        # anchor_add_label = torch.cat([self.queue_label[ind][None, :] for ind in split_inds])
-        # add_feat = torch.cat([self.queue_vector[ind][None, :, :] for ind in split_inds])
-
 
         bbox_results = dict(
             cls_score=cls_score,
@@ -362,13 +306,62 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
             bbox_pred=bbox_pred,
             bbox_feats=bbox_feats,
             fg_anchor=pos_bbox_feats,
-            # anchor_add_label=anchor_add_label,
             add_feat=add_feat,
             add_sim=add_sim,
             add_cls_score=add_cls_score,
             add_bbox_pred=add_bbox_pred,
             add_label=add_label,
             add_boxes=add_boxes)
+        return bbox_results
+    
+    def _contrast_bbox_forward(self, x, rois, labels, x_saug, saug_bboxes, saug_labels):
+        """Box head forward function used in both training and testing."""
+        # TODO: a more flexible way to decide which feature maps to use
+        pos_inds = (labels >= 0) & (labels < self.bbox_head.num_classes)
+        bbox_feats = self.bbox_roi_extractor(
+            x[:self.bbox_roi_extractor.num_inputs], rois)
+        saug_rois = bbox2roi([res for res in saug_bboxes])
+        all_saug_labels = torch.cat(saug_labels)
+        with torch.no_grad():
+            contrast_bbox_feats = self.bbox_roi_extractor(
+                x_saug[:self.bbox_roi_extractor.num_inputs], saug_rois)
+            contrast_bbox_feats = self.mem_fc(contrast_bbox_feats.view(contrast_bbox_feats.size(0), -1))
+            contrast_bbox_feats = F.normalize(contrast_bbox_feats, dim=1)
+        if self.with_shared_head:
+            bbox_feats = self.shared_head(bbox_feats)
+
+        pos_labels = labels[pos_inds]
+        pos_bbox_feats = bbox_feats[pos_inds].view(pos_labels.size(0), -1)
+        pos_bbox_feats = self.fwd_fc(pos_bbox_feats)
+        pos_bbox_feats = F.normalize(pos_bbox_feats, dim=1)
+
+        all_pos_logit = torch.zeros(0, 128).to(pos_labels.device)
+        
+        for i in range(pos_labels.size(0)):
+            pos_inds = all_saug_labels == pos_labels[i]
+            pos_logit = contrast_bbox_feats[pos_inds, :]
+            rand_index = torch.randint(low=0, high=pos_logit.size(0), size=(1,))
+            pos_logit = pos_logit[rand_index, :]
+            all_pos_logit = torch.cat([all_pos_logit, pos_logit], dim=0)
+
+        pos_logits = torch.einsum('nc,nc->n', [pos_bbox_feats, all_pos_logit])
+        neg_logits = torch.einsum('nc,kc->nk', [pos_bbox_feats, self.queue_vector.clone().detach()])
+        logits = torch.cat([pos_logits[:, None], neg_logits], dim=1)
+        logits /= self.T
+        labels = torch.zeros(logits.shape[0], dtype=torch.long).cuda()
+
+        self._dequeue_and_enqueue(contrast_bbox_feats, all_saug_labels)
+
+        cls_score, mid_cls_score, mid_det_score, bbox_pred = self.bbox_head(bbox_feats)
+
+        bbox_results = dict(
+            cls_score=cls_score,
+            mid_cls_score=mid_cls_score,
+            mid_det_score=mid_det_score,
+            bbox_pred=bbox_pred,
+            bbox_feats=bbox_feats,
+            logits=logits,
+            labels=labels,)
         return bbox_results
 
     def _unalbel_bbox_forward_train(self, x, sampling_results, gt_bboxes, gt_labels,
@@ -377,11 +370,11 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
         rois = bbox2roi([res.bboxes for res in sampling_results])
         bbox_targets = self.bbox_head.get_targets(sampling_results, gt_bboxes,
                                                   gt_labels, self.train_cfg)
-        bbox_results = self._unlabel_interp_bbox_forward(x, rois, bbox_targets[0])
+        x_saug = kwargs['x_saug']
+        saug_bboxes = kwargs['saug']['gt_bboxes']
+        bbox_results = self._contrast_bbox_forward(x, rois, bbox_targets[0], x_saug, saug_bboxes, kwargs['saug']['gt_labels'])
         split_list = [sr.bboxes.size(0) for sr in sampling_results]
         
-        target_sim = torch.zeros_like(bbox_results['add_sim'])
-
         loss_bbox = self.bbox_head.loss(bbox_results['cls_score'],
                                             bbox_results['bbox_pred'],
                                             bbox_results['mid_cls_score'],
@@ -392,13 +385,10 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
                                             self.train_cfg.sampler.num,
                                             gt_tags, **kwargs)
 
-        loss_mem_cls = self.bbox_head.mem_loss(bbox_results['add_cls_score'],
-                                bbox_results['add_bbox_pred'],
-                                bbox_results['add_label'],
-                                bbox_results['add_boxes'],
-                                bbox_results['add_sim'])
+        loss_contrastive = F.cross_entropy(bbox_results['logits'], bbox_results['labels']) * self.contrastive_lambda
 
-        loss_bbox.update(loss_mem_cls)
+        loss_bbox['loss_contrastive'] = loss_contrastive
+        # print(loss_contrastive)
 
         bbox_results.update(loss_bbox=loss_bbox)
 
@@ -712,7 +702,7 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
 
     def mem_weight_update(self):
         for param_q, param_k in zip(self.mem_fc.parameters(), self.fwd_fc.parameters()):
-            param_q.data = param_q.data * self.m + param_k.data * (1. - self.m)
+            param_q.data = param_q.data * self.ema + param_k.data * (1. - self.ema)
 
     def mem_weight_init(self):
         # mem no gradient - teacher weak augment

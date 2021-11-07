@@ -216,6 +216,8 @@ class STACTransform:
         else:
             if self.mode == 'mem':
                 pass
+            elif self.mode == 'strong_aug':
+                augment_fn = self.strong_augment_fn
             else:
                 augment_fn = self.default_augment_fn
         if len(augment_fn

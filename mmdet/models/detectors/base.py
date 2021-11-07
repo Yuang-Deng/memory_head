@@ -235,6 +235,9 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
                   DDP, it means the batch size on each GPU), which is used for
                   averaging the logs.
         """
+        if isinstance(data, list):
+            data[0]['saug'] = data[1]
+            data = data[0]
         if mem_forward:
             self.forward_mem(**data)
             return

@@ -57,6 +57,7 @@ class CustomDataset(Dataset):
     def __init__(self,
                  ann_file,
                  pipeline,
+                 pipelines=None,
                  classes=None,
                  data_root=None,
                  img_prefix='',
@@ -65,7 +66,8 @@ class CustomDataset(Dataset):
                  test_mode=False,
                  filter_empty_gt=True,
                  label_type=0,
-                 sample_persent=100):
+                 sample_persent=100,
+                 w_s_aug=False):
         self.ann_file = ann_file
         self.data_root = data_root
         self.img_prefix = img_prefix
@@ -108,6 +110,9 @@ class CustomDataset(Dataset):
 
         # processing pipeline
         self.pipeline = Compose(pipeline)
+        self.w_s_aug = w_s_aug
+        if w_s_aug:
+            self.pipelines = Compose(pipelines)
 
     def __len__(self):
         """Total number of samples of data."""
@@ -231,7 +236,16 @@ class CustomDataset(Dataset):
         if self.proposals is not None:
             results['proposals'] = self.proposals[idx]
         self.pre_pipeline(results)
-        return self.pipeline(results)
+        if self.w_s_aug:
+            img_info = self.data_infos[idx]
+            ann_info = self.get_ann_info(idx)
+            resultss = dict(img_info=img_info, ann_info=ann_info)
+            if self.proposals is not None:
+                resultss['proposals'] = self.proposals[idx]
+            self.pre_pipeline(resultss)
+            return [self.pipeline(results), self.pipelines(resultss)]
+        else:
+            return self.pipeline(results)
 
     def prepare_test_img(self, idx):
         """Get testing data  after pipeline.
