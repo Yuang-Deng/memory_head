@@ -5,6 +5,7 @@ import warnings
 from math import inf
 import time
 
+from mmcv.runner.hooks import HOOKS, Hook
 import torch.distributed as dist
 from torch.nn.modules.batchnorm import _BatchNorm
 from torch.utils.data import DataLoader
@@ -74,18 +75,9 @@ class MEMHook(Hook):
     def before_train_epoch(self, runner):
         if self._should_mem_forward(runner):
             self._mem_forward(runner)
-            if hasattr(runner.model.module.roi_head, 'mem_weight_init'):
-                # in case the data loader uses `SequentialSampler` in Pytorch
-                runner.model.module.roi_head.mem_weight_init()
         if hasattr(runner.model.module.roi_head, 'set_epoch'):
             # in case the data loader uses `SequentialSampler` in Pytorch
             runner.model.module.roi_head.set_epoch(runner.epoch)
-        
-    def before_iter(self, runner):
-        if self._should_mem_forward(runner):
-            if hasattr(runner.model.module.roi_head, 'mem_weight_update'):
-                # in case the data loader uses `SequentialSampler` in Pytorch
-                runner.model.module.roi_head.mem_weight_update()
         
 
 
@@ -125,3 +117,17 @@ class DistMEMHook(MEMHook):
 
         time_end=time.time()
         print('time cost',time_end-time_start,'s')
+    
+@HOOKS.register_module()
+class MEMEMAHook(Hook):
+    def before_run(self, runner):
+        if hasattr(runner.model.module.roi_head, 'mem_weight_init'):
+                # in case the data loader uses `SequentialSampler` in Pytorch
+                runner.model.module.roi_head.mem_weight_init()
+
+    def after_train_iter(self, runner):
+        if hasattr(runner.model.module.roi_head, 'mem_weight_update'):
+                # in case the data loader uses `SequentialSampler` in Pytorch
+                runner.model.module.roi_head.mem_weight_update()
+        
+        

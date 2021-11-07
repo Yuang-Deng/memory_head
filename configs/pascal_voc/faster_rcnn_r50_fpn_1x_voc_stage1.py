@@ -16,7 +16,7 @@ model = dict(
     ),
     roi_head=dict(
         type='MMStandardRoIHead',
-        contrastive_lambda=0.1,
+        contrastive_lambda=0,
         warm_epoch=0,
         memory_k=12613,
         T=0.07,
@@ -38,6 +38,7 @@ model = dict(
 )
 # optimizer
 optimizer = dict(type='SGD', lr=0.01, momentum=0.9, weight_decay=0.0001)
+custom_hooks = [dict(type='NumClassCheckHook'), dict(type='MEMEMAHook')]
 optimizer_config = dict(grad_clip=None)
 # learning policy
 # actual epoch = 3 * 3 = 9
