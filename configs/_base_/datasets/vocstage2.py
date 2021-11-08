@@ -17,7 +17,8 @@ train_pipeline = [
 mem_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(type='LoadAnnotations', with_bbox=True),
-    # dict(type='MOCOTransform'),
+    dict(type='STACTransform', magnitude=6, mode='strong_aug'),
+    dict(type='MOCOTransform'),
     dict(type='Resize', img_scale=(1000, 600), keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
     dict(type='Normalize', **img_norm_cfg),
@@ -51,7 +52,9 @@ data = dict(
             ],
             img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
             label_type=[0, 1],
-            pipeline=train_pipeline),
+            pipeline=train_pipeline,
+            pipelines=mem_pipeline,
+            w_s_aug=True),
     val=dict(
         type=dataset_type,
         ann_file=data_root + 'VOC2007/ImageSets/Main/test.txt',

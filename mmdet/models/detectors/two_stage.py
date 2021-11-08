@@ -239,10 +239,20 @@ class TwoStageDetector(BaseDetector):
         else:
             proposal_list = proposals
 
+        if 'saug' in kwargs.keys():
+            x_saug_labeled = self.extract_feat(kwargs['saug']['img'][:len(img) // 2])
+            kwargs['x_saug'] = x_saug_labeled
+            kwargs['aug_gt_bboxes'] = kwargs['saug']['gt_bboxes'][:len(img) // 2]
+            kwargs['aug_gt_labels'] = kwargs['saug']['gt_labels'][:len(img) // 2]
         roi_losses = self.roi_head.forward_train(label_x, label_img_metas, proposal_list,
                                                  label_gt_bboxes, label_gt_labels,
                                                  gt_bboxes_ignore, gt_masks, label_gt_tags,
                                                  **kwargs)
+        if 'saug' in kwargs.keys():
+            x_saug_unlabeled = self.extract_feat(kwargs['saug']['img'][len(img) // 2:])
+            kwargs['x_saug'] = x_saug_unlabeled
+            kwargs['aug_gt_bboxes'] = kwargs['saug']['gt_bboxes'][len(img) // 2:]
+            kwargs['aug_gt_labels'] = kwargs['saug']['gt_labels'][len(img) // 2:]
         un_roi_losses = self.roi_head.forward_train(unlabel_x, unlabel_img_metas, un_proposal_list,
                                                  unlabel_gt_bboxes, unlabel_gt_labels,
                                                  gt_bboxes_ignore, gt_masks, unlabel_gt_tags,

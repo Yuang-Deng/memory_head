@@ -5,15 +5,17 @@ _base_ = [
 ]
 data_root = '/home/qiucm/workspace/dataset/VOCdevkit/'
 data = dict(
-    samples_per_gpu=4,
-    workers_per_gpu=0,
+    samples_per_gpu=2,
+    workers_per_gpu=2,
 )
 model = dict(
     roi_head=dict(
         type='MMStandardRoIHead',
-        intp_base=0.7,
-        intp_band=2,
+        contrastive_lambda=0.1,
         warm_epoch=0,
+        memory_k=16384,
+        T=0.7,
+        ema=0.99,
         bbox_head=dict(
             type='MMShared2FCBBoxHead',
             num_classes=20,
@@ -23,8 +25,6 @@ model = dict(
             loss_sim_weight=1,
             sim_target=0,
         ),
-        memory_k=15827,
-        top_k=32,
     ),
     train_cfg=dict(
         label_type2weight=[1,2,2],
@@ -32,7 +32,7 @@ model = dict(
     ),
 )
 # optimizer
-optimizer = dict(type='SGD', lr=0.005, momentum=0.9, weight_decay=0.0001)
+optimizer = dict(type='SGD', lr=0.002, momentum=0.9, weight_decay=0.0001)
 optimizer_config = dict(grad_clip=None)
 # learning policy
 # actual epoch = 3 * 3 = 9

@@ -326,6 +326,7 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
             contrast_bbox_feats = self.bbox_roi_extractor(
                 x_saug[:self.bbox_roi_extractor.num_inputs], saug_rois)
             contrast_bbox_feats = self.mem_fc(contrast_bbox_feats.view(contrast_bbox_feats.size(0), -1))
+            # contrast_bbox_feats = self.fwd_fc(contrast_bbox_feats.view(contrast_bbox_feats.size(0), -1))
             contrast_bbox_feats = F.normalize(contrast_bbox_feats, dim=1)
         if self.with_shared_head:
             bbox_feats = self.shared_head(bbox_feats)
@@ -371,8 +372,7 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
         bbox_targets = self.bbox_head.get_targets(sampling_results, gt_bboxes,
                                                   gt_labels, self.train_cfg)
         x_saug = kwargs['x_saug']
-        saug_bboxes = kwargs['saug']['gt_bboxes']
-        bbox_results = self._contrast_bbox_forward(x, rois, bbox_targets[0], x_saug, saug_bboxes, kwargs['saug']['gt_labels'])
+        bbox_results = self._contrast_bbox_forward(x, rois, bbox_targets[0], x_saug, kwargs['aug_gt_bboxes'], kwargs['aug_gt_labels'])
         split_list = [sr.bboxes.size(0) for sr in sampling_results]
         
         loss_bbox = self.bbox_head.loss(bbox_results['cls_score'],
@@ -707,5 +707,5 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
     def mem_weight_init(self):
         # mem no gradient - teacher weak augment
         for param_q, param_k in zip(self.mem_fc.parameters(), self.fwd_fc.parameters()):
-            param_q.data.copy_(param_k.data)  # initialize
-            param_q.requires_grad = False  # not update by gradient
+            param_q.data.copy_(param_k.data)
+            param_q.requires_grad = False
