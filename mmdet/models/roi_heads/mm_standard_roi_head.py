@@ -336,20 +336,29 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
         pos_bbox_feats = self.fwd_fc(pos_bbox_feats)
         pos_bbox_feats = F.normalize(pos_bbox_feats, dim=1)
 
-        all_pos_logit = torch.zeros(0, 128).to(pos_labels.device)
+        all_pos_logit1 = torch.zeros(0, 128).to(pos_labels.device)
+        all_pos_logit2 = torch.zeros(0, 128).to(pos_labels.device)
         
         for i in range(pos_labels.size(0)):
             pos_inds = all_saug_labels == pos_labels[i]
             pos_logit = contrast_bbox_feats[pos_inds, :]
             rand_index = torch.randint(low=0, high=pos_logit.size(0), size=(1,))
-            pos_logit = pos_logit[rand_index, :]
-            all_pos_logit = torch.cat([all_pos_logit, pos_logit], dim=0)
+            # print("rand_index1:", rand_index)
+            pos_logit1 = pos_logit[rand_index, :]
+            all_pos_logit1 = torch.cat([all_pos_logit1, pos_logit1], dim=0)
+            rand_index = torch.randint(low=0, high=pos_logit.size(0), size=(1,))
+            # print("rand_index2：", rand_index)
+            pos_logit2 = pos_logit[rand_index, :]
+            all_pos_logit2 = torch.cat([all_pos_logit2, pos_logit2], dim=0)
 
-        pos_logits = torch.einsum('nc,nc->n', [pos_bbox_feats, all_pos_logit])
+        pos_logits1 = torch.einsum('nc,nc->n', [pos_bbox_feats, all_pos_logit1])
+        pos_logits2 = torch.einsum('nc,nc->n', [pos_bbox_feats, all_pos_logit2])
         neg_logits = torch.einsum('nc,kc->nk', [pos_bbox_feats, self.queue_vector.clone().detach()])
-        logits = torch.cat([pos_logits[:, None], neg_logits], dim=1)
-        logits /= self.T
-        labels = torch.zeros(logits.shape[0], dtype=torch.long).cuda()
+        logits1 = torch.cat([pos_logits1[:, None], neg_logits], dim=1)
+        logits1 /= self.T
+        logits2 = torch.cat([pos_logits2[:, None], neg_logits], dim=1)
+        logits2 /= self.T
+        labels = torch.zeros(logits1.shape[0], dtype=torch.long).cuda()
 
         self._dequeue_and_enqueue(contrast_bbox_feats, all_saug_labels)
 
@@ -361,7 +370,8 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
             mid_det_score=mid_det_score,
             bbox_pred=bbox_pred,
             bbox_feats=bbox_feats,
-            logits=logits,
+            logits1=logits1,
+            logits2=logits2,
             labels=labels,)
         return bbox_results
 
@@ -385,7 +395,11 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
                                             self.train_cfg.sampler.num,
                                             gt_tags, **kwargs)
 
-        loss_contrastive = F.cross_entropy(bbox_results['logits'], bbox_results['labels']) * self.contrastive_lambda
+        # loss_contrastive = (F.cross_entropy(bbox_results['logits1'], bbox_results['labels']) * 0.5 + 
+        #                     F.cross_entropy(bbox_results['logits2'], bbox_results['labels']) * 0.5) * self.contrastive_lambda
+
+        loss_contrastive = F.cross_entropy(bbox_results['logits1'], bbox_results['labels']) * self.contrastive_lambda
+
 
         loss_bbox['loss_contrastive'] = loss_contrastive
         # print(loss_contrastive)

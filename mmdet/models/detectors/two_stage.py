@@ -186,6 +186,8 @@ class TwoStageDetector(BaseDetector):
         if 'saug' in kwargs.keys():
             x_saug = self.extract_feat(kwargs['saug']['img'])
             kwargs['x_saug'] = x_saug
+            kwargs['aug_gt_bboxes'] = kwargs['saug']['gt_bboxes']
+            kwargs['aug_gt_labels'] = kwargs['saug']['gt_labels']
         roi_losses = self.roi_head.forward_train(x, img_metas, proposal_list,
                                                  gt_bboxes, gt_labels,
                                                  gt_bboxes_ignore, gt_masks,
