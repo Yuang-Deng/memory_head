@@ -336,29 +336,27 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
         pos_bbox_feats = self.fwd_fc(pos_bbox_feats)
         pos_bbox_feats = F.normalize(pos_bbox_feats, dim=1)
 
-        all_pos_logit1 = torch.zeros(0, 128).to(pos_labels.device)
-        all_pos_logit2 = torch.zeros(0, 128).to(pos_labels.device)
+        all_pos_logit = []
+        for i in range(self.pos_k):
+            all_pos_logit.append(torch.zeros(0, 128).to(pos_labels.device))
         
         for i in range(pos_labels.size(0)):
             pos_inds = all_saug_labels == pos_labels[i]
-            pos_logit = contrast_bbox_feats[pos_inds, :]
-            rand_index = torch.randint(low=0, high=pos_logit.size(0), size=(1,))
-            # print("rand_index1:", rand_index)
-            pos_logit1 = pos_logit[rand_index, :]
-            all_pos_logit1 = torch.cat([all_pos_logit1, pos_logit1], dim=0)
-            rand_index = torch.randint(low=0, high=pos_logit.size(0), size=(1,))
-            # print("rand_index2：", rand_index)
-            pos_logit2 = pos_logit[rand_index, :]
-            all_pos_logit2 = torch.cat([all_pos_logit2, pos_logit2], dim=0)
+            pos_logits = contrast_bbox_feats[pos_inds, :]
+            for i in range(self.pos_k):
+                rand_index = torch.randint(low=0, high=pos_logits.size(0), size=(1,))
+                pos_logit = pos_logits[rand_index, :]
+                all_pos_logit[i] = torch.cat([all_pos_logit[i], pos_logit], dim=0)
 
-        pos_logits1 = torch.einsum('nc,nc->n', [pos_bbox_feats, all_pos_logit1])
-        pos_logits2 = torch.einsum('nc,nc->n', [pos_bbox_feats, all_pos_logit2])
+        re_logits = []
         neg_logits = torch.einsum('nc,kc->nk', [pos_bbox_feats, self.queue_vector.clone().detach()])
-        logits1 = torch.cat([pos_logits1[:, None], neg_logits], dim=1)
-        logits1 /= self.T
-        logits2 = torch.cat([pos_logits2[:, None], neg_logits], dim=1)
-        logits2 /= self.T
-        labels = torch.zeros(logits1.shape[0], dtype=torch.long).cuda()
+        for i in range(self.pos_k):
+            pos_logits = torch.einsum('nc,nc->n', [pos_bbox_feats, all_pos_logit[i]])
+            logits = torch.cat([pos_logits[:, None], neg_logits], dim=1)
+            logits /= self.T
+            re_logits.append(logits)
+
+        labels = torch.zeros(logits.shape[0], dtype=torch.long).cuda()
 
         self._dequeue_and_enqueue(contrast_bbox_feats, all_saug_labels)
 
@@ -370,8 +368,7 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
             mid_det_score=mid_det_score,
             bbox_pred=bbox_pred,
             bbox_feats=bbox_feats,
-            logits1=logits1,
-            logits2=logits2,
+            logits=re_logits,
             labels=labels,)
         return bbox_results
 
@@ -398,7 +395,10 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
         # loss_contrastive = (F.cross_entropy(bbox_results['logits1'], bbox_results['labels']) * 0.5 + 
         #                     F.cross_entropy(bbox_results['logits2'], bbox_results['labels']) * 0.5) * self.contrastive_lambda
 
-        loss_contrastive = F.cross_entropy(bbox_results['logits1'], bbox_results['labels']) * self.contrastive_lambda
+        loss_contrastive = []
+        for i in range(self.pos_k):
+            loss_contrastive.append(F.cross_entropy(bbox_results['logits'][i], bbox_results['labels']) * (1 / self.pos_k))
+        loss_contrastive = sum(loss_contrastive) * self.contrastive_lambda
 
 
         loss_bbox['loss_contrastive'] = loss_contrastive

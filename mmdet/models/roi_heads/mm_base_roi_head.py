@@ -26,6 +26,7 @@ class MMBaseRoIHead(BaseModule, metaclass=ABCMeta):
                  warm_epoch=5,
                  T=7,
                  ema=0.99,
+                 pos_k=3,
                  top_k=16):
         super(MMBaseRoIHead, self).__init__(init_cfg)
         self.train_cfg = train_cfg
@@ -38,6 +39,7 @@ class MMBaseRoIHead(BaseModule, metaclass=ABCMeta):
         self.contrastive_lambda = contrastive_lambda
         self.T = T
         self.ema = ema
+        self.pos_k = pos_k
         if shared_head is not None:
             shared_head.pretrained = pretrained
             self.shared_head = build_shared_head(shared_head)
