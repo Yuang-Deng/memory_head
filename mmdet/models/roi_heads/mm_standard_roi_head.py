@@ -224,7 +224,7 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
                                                         gt_bboxes, gt_labels,
                                                         img_metas, gt_tags, **kwargs)
 
-            # if '_' in img_metas[0]['ori_filename'] and self.cur_epoch >= self.warm_epoch:
+            # if 1 == img_metas[0]['label_type'] and self.cur_epoch >= self.warm_epoch:
             #     bbox_results = self._unalbel_bbox_forward_train(x, sampling_results,
             #                                             gt_bboxes, gt_labels,
             #                                             img_metas, gt_tags, **kwargs)

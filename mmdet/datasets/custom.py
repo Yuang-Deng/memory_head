@@ -155,6 +155,7 @@ class CustomDataset(Dataset):
         results['img_prefix'] = self.img_prefix
         results['seg_prefix'] = self.seg_prefix
         results['proposal_file'] = self.proposal_file
+        results['label_type'] = self.label_type
         results['bbox_fields'] = []
         results['mask_fields'] = []
         results['seg_fields'] = []
@@ -182,17 +183,13 @@ class CustomDataset(Dataset):
             if img_info['width'] / img_info['height'] > 1:
                 if self.label_type == 0:
                     self.flag[i] = 0
-                    img_info['label_type'] = 0
                 else:
                     self.flag[i] = 2
-                    img_info['label_type'] = 1
             else:
                 if self.label_type == 0:
                     self.flag[i] = 1
-                    img_info['label_type'] = 0
                 else:
                     self.flag[i] = 3
-                    img_info['label_type'] = 1
 
     def _rand_another(self, idx):
         """Get another random index from the same group as the given index."""

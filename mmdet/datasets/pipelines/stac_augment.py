@@ -211,7 +211,7 @@ class STACTransform:
         img = results['img']
         bboxes = results['ann_info']['bboxes']
         # label_type = results['label_type']
-        if '_' in results['img_info']['filename']:
+        if 1 == results['label_type']:
             augment_fn = self.strong_augment_fn
         else:
             if self.mode == 'mem':

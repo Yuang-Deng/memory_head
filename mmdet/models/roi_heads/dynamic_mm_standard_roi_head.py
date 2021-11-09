@@ -188,7 +188,7 @@ class DynamicMMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
         losses = dict()
         # bbox head forward and loss
         if self.with_bbox:
-            if '_' in img_metas[0]['ori_filename']:
+            if 1 == img_metas[0]['label_type']:
                 bbox_results = self._unalbel_bbox_forward_train(x, sampling_results,
                                                         gt_bboxes, gt_labels,
                                                         img_metas, gt_tags, **kwargs)
