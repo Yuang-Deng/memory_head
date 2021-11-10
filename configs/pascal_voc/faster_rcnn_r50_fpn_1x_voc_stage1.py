@@ -16,11 +16,13 @@ model = dict(
     ),
     roi_head=dict(
         type='MMStandardRoIHead',
-        contrastive_lambda=0.1,
+        contrastive_lambda=0.03,
+        contrastive_lambda_ori=0.1,
+        ori_pos_k=1,
         warm_epoch=0,
         memory_k=12613,
         pos_k=2,
-        T=0.7,
+        T=0.1,
         ema=0.99,
         bbox_head=dict(
             type='MMShared2FCBBoxHead',

@@ -220,7 +220,7 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
         losses = dict()
         # bbox head forward and loss
         if self.with_bbox:
-            bbox_results = self._unalbel_bbox_forward_train(x, sampling_results,
+            bbox_results = self._unlabel_bbox_forward_train(x, sampling_results,
                                                         gt_bboxes, gt_labels,
                                                         img_metas, gt_tags, **kwargs)
 
@@ -314,10 +314,22 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
             add_boxes=add_boxes)
         return bbox_results
     
-    def _contrast_bbox_forward(self, x, rois, labels, x_saug, saug_bboxes, saug_labels):
+    def _contrast_bbox_forward(self, x, rois, labels, x_saug, saug_bboxes, saug_labels, sampling_results):
         """Box head forward function used in both training and testing."""
         # TODO: a more flexible way to decide which feature maps to use
-        pos_inds = (labels >= 0) & (labels < self.bbox_head.num_classes)
+        # pos_inds = (labels >= 0) & (labels < self.bbox_head.num_classes)
+
+        device = rois.device
+        batch = sampling_results[0].bboxes.size(0)
+        pos_inds = torch.zeros([0]).to(device).long()
+        pos_gt_map = torch.zeros([0]).to(device).long()
+        pos_labels = torch.zeros([0]).to(device).long()
+        for i, res in enumerate(sampling_results):
+            pos_inds = torch.cat([pos_inds, (torch.arange(0, res.pos_inds.size(0)).to(device).long() + (i * batch)).view(-1)])
+            pos_gt_map = torch.cat([pos_gt_map, (res.pos_assigned_gt_inds+ (i * batch)).view(-1)])
+            pos_labels = torch.cat([pos_labels, res.pos_gt_labels])
+
+
         bbox_feats = self.bbox_roi_extractor(
             x[:self.bbox_roi_extractor.num_inputs], rois)
         saug_rois = bbox2roi([res for res in saug_bboxes])
@@ -331,30 +343,47 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
         if self.with_shared_head:
             bbox_feats = self.shared_head(bbox_feats)
 
-        pos_labels = labels[pos_inds]
         pos_bbox_feats = bbox_feats[pos_inds].view(pos_labels.size(0), -1)
         pos_bbox_feats = self.fwd_fc(pos_bbox_feats)
         pos_bbox_feats = F.normalize(pos_bbox_feats, dim=1)
 
-        all_pos_logit = []
+        all_ori_pos_logit_pseudo = []
+        for i in range(self.ori_pos_k):
+            all_ori_pos_logit_pseudo.append(torch.zeros(0, 128).to(pos_labels.device))
+
+        all_pos_logit_pseudo = []
         for i in range(self.pos_k):
-            all_pos_logit.append(torch.zeros(0, 128).to(pos_labels.device))
+            all_pos_logit_pseudo.append(torch.zeros(0, 128).to(pos_labels.device))
         
         for i in range(pos_labels.size(0)):
+            pos_inds = pos_gt_map == pos_gt_map[i]
+            pos_logits = pos_bbox_feats[pos_inds, :]
+            for i in range(self.ori_pos_k):
+                rand_index = torch.randint(low=0, high=pos_logits.size(0), size=(1,))
+                pos_logit = pos_logits[rand_index, :]
+                all_ori_pos_logit_pseudo[i] = torch.cat([all_ori_pos_logit_pseudo[i], pos_logit], dim=0)
+
             pos_inds = all_saug_labels == pos_labels[i]
             pos_logits = contrast_bbox_feats[pos_inds, :]
             for i in range(self.pos_k):
                 rand_index = torch.randint(low=0, high=pos_logits.size(0), size=(1,))
                 pos_logit = pos_logits[rand_index, :]
-                all_pos_logit[i] = torch.cat([all_pos_logit[i], pos_logit], dim=0)
+                all_pos_logit_pseudo[i] = torch.cat([all_pos_logit_pseudo[i], pos_logit], dim=0)
 
         re_logits = []
         neg_logits = torch.einsum('nc,kc->nk', [pos_bbox_feats, self.queue_vector.clone().detach()])
         for i in range(self.pos_k):
-            pos_logits = torch.einsum('nc,nc->n', [pos_bbox_feats, all_pos_logit[i]])
+            pos_logits = torch.einsum('nc,nc->n', [pos_bbox_feats, all_pos_logit_pseudo[i]])
             logits = torch.cat([pos_logits[:, None], neg_logits], dim=1)
             logits /= self.T
             re_logits.append(logits)
+        
+        re_ori_logits = []
+        for i in range(self.ori_pos_k):
+            pos_logits = torch.einsum('nc,nc->n', [pos_bbox_feats, all_ori_pos_logit_pseudo[i]])
+            logits = torch.cat([pos_logits[:, None], neg_logits], dim=1)
+            logits /= self.T
+            re_ori_logits.append(logits)
 
         labels = torch.zeros(logits.shape[0], dtype=torch.long).cuda()
 
@@ -369,17 +398,18 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
             bbox_pred=bbox_pred,
             bbox_feats=bbox_feats,
             logits=re_logits,
+            ori_logits=re_ori_logits,
             labels=labels,)
         return bbox_results
 
-    def _unalbel_bbox_forward_train(self, x, sampling_results, gt_bboxes, gt_labels,
+    def _unlabel_bbox_forward_train(self, x, sampling_results, gt_bboxes, gt_labels,
                             img_metas, gt_tags, **kwargs):
         """Run forward function and calculate loss for box head in training."""
         rois = bbox2roi([res.bboxes for res in sampling_results])
         bbox_targets = self.bbox_head.get_targets(sampling_results, gt_bboxes,
                                                   gt_labels, self.train_cfg)
         x_saug = kwargs['x_saug']
-        bbox_results = self._contrast_bbox_forward(x, rois, bbox_targets[0], x_saug, kwargs['aug_gt_bboxes'], kwargs['aug_gt_labels'])
+        bbox_results = self._contrast_bbox_forward(x, rois, bbox_targets[0], x_saug, kwargs['aug_gt_bboxes'], kwargs['aug_gt_labels'], sampling_results)
         split_list = [sr.bboxes.size(0) for sr in sampling_results]
         
         loss_bbox = self.bbox_head.loss(bbox_results['cls_score'],
@@ -389,7 +419,6 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
                                             split_list,
                                             rois,
                                             *bbox_targets,
-                                            self.train_cfg.sampler.num,
                                             gt_tags, **kwargs)
 
         # loss_contrastive = (F.cross_entropy(bbox_results['logits1'], bbox_results['labels']) * 0.5 + 
@@ -400,8 +429,14 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
             loss_contrastive.append(F.cross_entropy(bbox_results['logits'][i], bbox_results['labels']) * (1 / self.pos_k))
         loss_contrastive = sum(loss_contrastive) * self.contrastive_lambda
 
+        loss_contrastive_ori = []
+        for i in range(self.ori_pos_k):
+            loss_contrastive_ori.append(F.cross_entropy(bbox_results['ori_logits'][i], bbox_results['labels']) * (1 / self.pos_k))
+        loss_contrastive_ori = sum(loss_contrastive_ori) * self.contrastive_lambda_ori
+
 
         loss_bbox['loss_contrastive'] = loss_contrastive
+        loss_bbox['loss_contrastive_ori'] = loss_contrastive_ori
         # print(loss_contrastive)
 
         bbox_results.update(loss_bbox=loss_bbox)

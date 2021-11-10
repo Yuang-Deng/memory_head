@@ -294,7 +294,6 @@ class MMBBoxHead(BaseModule):
              label_weights,
              bbox_targets,
              bbox_weights,
-             num_per_img=512,
              gt_tags=None,
              reduction_override=None,
              **kwargs):
