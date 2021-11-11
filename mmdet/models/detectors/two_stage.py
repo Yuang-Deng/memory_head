@@ -2,6 +2,7 @@
 import warnings
 
 import torch
+from torch._C import wait
 
 from ..builder import DETECTORS, build_backbone, build_head, build_neck
 from .base import BaseDetector
@@ -188,6 +189,14 @@ class TwoStageDetector(BaseDetector):
             kwargs['x_saug'] = x_saug
             kwargs['aug_gt_bboxes'] = kwargs['saug']['gt_bboxes']
             kwargs['aug_gt_labels'] = kwargs['saug']['gt_labels']
+            _, aug_proposal_list = self.rpn_head.forward_train(
+                x_saug,
+                kwargs['saug']['img_metas'],
+                kwargs['aug_gt_bboxes'],
+                gt_labels=None,
+                gt_bboxes_ignore=gt_bboxes_ignore,
+                proposal_cfg=proposal_cfg)
+            kwargs['aug_proposal_list'] = aug_proposal_list
         roi_losses = self.roi_head.forward_train(x, img_metas, proposal_list,
                                                  gt_bboxes, gt_labels,
                                                  gt_bboxes_ignore, gt_masks,
@@ -246,6 +255,16 @@ class TwoStageDetector(BaseDetector):
             kwargs['x_saug'] = x_saug_labeled
             kwargs['aug_gt_bboxes'] = kwargs['saug']['gt_bboxes'][:len(img) // 2]
             kwargs['aug_gt_labels'] = kwargs['saug']['gt_labels'][:len(img) // 2]
+            with torch.no_grad():
+                _, aug_proposal_list = self.rpn_head.forward_train(
+                    x_saug_labeled,
+                    kwargs['saug']['img_metas'][:len(img) // 2],
+                    kwargs['aug_gt_labels'],
+                    gt_labels=None,
+                    gt_bboxes_ignore=gt_bboxes_ignore,
+                    proposal_cfg=proposal_cfg)
+            kwargs['aug_proposal_list'] = aug_proposal_list
+
         roi_losses = self.roi_head.forward_train(label_x, label_img_metas, proposal_list,
                                                  label_gt_bboxes, label_gt_labels,
                                                  gt_bboxes_ignore, gt_masks, label_gt_tags,
@@ -255,6 +274,16 @@ class TwoStageDetector(BaseDetector):
             kwargs['x_saug'] = x_saug_unlabeled
             kwargs['aug_gt_bboxes'] = kwargs['saug']['gt_bboxes'][len(img) // 2:]
             kwargs['aug_gt_labels'] = kwargs['saug']['gt_labels'][len(img) // 2:]
+            with torch.no_grad():
+                _, aug_proposal_list = self.rpn_head.forward_train(
+                    x_saug_labeled,
+                    kwargs['saug']['img_metas'][len(img) // 2:],
+                    kwargs['aug_gt_labels'],
+                    gt_labels=None,
+                    gt_bboxes_ignore=gt_bboxes_ignore,
+                    proposal_cfg=proposal_cfg)
+            kwargs['aug_proposal_list'] = aug_proposal_list
+
         un_roi_losses = self.roi_head.forward_train(unlabel_x, unlabel_img_metas, un_proposal_list,
                                                  unlabel_gt_bboxes, unlabel_gt_labels,
                                                  gt_bboxes_ignore, gt_masks, unlabel_gt_tags,
