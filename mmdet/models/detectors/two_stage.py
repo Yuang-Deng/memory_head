@@ -278,7 +278,7 @@ class TwoStageDetector(BaseDetector):
                 _, aug_proposal_list = self.rpn_head.forward_train(
                     x_saug_labeled,
                     kwargs['saug']['img_metas'][len(img) // 2:],
-                    kwargs['aug_gt_labels'],
+                    kwargs['aug_gt_bboxes'],
                     gt_labels=None,
                     gt_bboxes_ignore=gt_bboxes_ignore,
                     proposal_cfg=proposal_cfg)
@@ -298,7 +298,6 @@ class TwoStageDetector(BaseDetector):
                 roi_losses[k] = 0
                 roi_losses[k] += un_roi_losses[k] * label_type2weight[1]
         losses.update(roi_losses)
-        # losses.update(un_roi_losses['loss_mem_cls'] * label_type2weight[1])
 
         return losses
 
