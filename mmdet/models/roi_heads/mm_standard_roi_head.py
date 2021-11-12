@@ -342,6 +342,12 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
             pos_inds = torch.cat([pos_inds, (torch.arange(0, res.pos_inds.size(0)).to(device).long() + (i * batch)).view(-1)])
             pos_gt_map = torch.cat([pos_gt_map, (res.pos_assigned_gt_inds+ (i * batch)).view(-1)])
             pos_gt_map_ctr = torch.cat([pos_gt_map_ctr, (res_ctr.pos_assigned_gt_inds+ (i * batch)).view(-1)])
+            # print(set(res.pos_assigned_gt_inds.cpu().numpy().tolist()))
+            # print(set(res_ctr.pos_assigned_gt_inds.cpu().numpy().tolist()))
+            # if set(res.pos_assigned_gt_inds.cpu().numpy().tolist()) == set(res_ctr.pos_assigned_gt_inds.cpu().numpy().tolist()):
+            #     print('ad')
+            # else:
+            #     print('cb')
             pos_labels = torch.cat([pos_labels, res.pos_gt_labels])
 
         bbox_feats = self.bbox_roi_extractor(
@@ -380,12 +386,12 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
             all_pos_logit_pseudo.append(torch.zeros(0, 128).to(pos_labels.device))
         
         for i in range(pos_labels.size(0)):
-            pos_inds = pos_gt_map_ctr == pos_gt_map[i]
-            pos_logits = contrast_bbox_feats[pos_inds, :]
+            pos_inds = pos_gt_map == pos_gt_map[i]
+            pos_logits = pos_bbox_feats[pos_inds, :]
             # TODO 存在不够的情况 暂不清楚原因
-            if pos_logits.size(0) == 0:
-                pos_inds = pos_gt_map == pos_gt_map[i]
-                pos_logits = pos_bbox_feats[pos_inds, :]
+            # if pos_logits.size(0) == 0:
+            #     pos_inds = pos_gt_map == pos_gt_map[i]
+            #     pos_logits = pos_bbox_feats[pos_inds, :]
             for j in range(self.ori_pos_k):
                 rand_index = torch.randint(low=0, high=pos_logits.size(0), size=(1,))
                 pos_logit = pos_logits[rand_index, :]
