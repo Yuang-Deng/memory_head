@@ -259,7 +259,7 @@ class TwoStageDetector(BaseDetector):
                 _, aug_proposal_list = self.rpn_head.forward_train(
                     x_saug_labeled,
                     kwargs['saug']['img_metas'][:len(img) // 2],
-                    kwargs['aug_gt_labels'],
+                    kwargs['aug_gt_bboxes'],
                     gt_labels=None,
                     gt_bboxes_ignore=gt_bboxes_ignore,
                     proposal_cfg=proposal_cfg)
