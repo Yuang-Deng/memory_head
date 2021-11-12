@@ -359,10 +359,12 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
         saug_rois = bbox2roi([res.pos_bboxes for res in sampling_results_ctr])
         all_saug_labels = torch.cat([res.pos_gt_labels for res in sampling_results_ctr])
         with torch.no_grad():
+            pos_bbox_feats_ctr = bbox_feats[pos_inds].view(pos_labels.size(0), -1)
+            pos_bbox_feats_ctr = self.fwd_fc(pos_bbox_feats_ctr)
+            pos_bbox_feats_ctr = F.normalize(pos_bbox_feats_ctr, dim=1)
             contrast_bbox_feats = self.bbox_roi_extractor(
                 x_saug[:self.bbox_roi_extractor.num_inputs], saug_rois)
             contrast_bbox_feats = self.mem_fc(contrast_bbox_feats.view(contrast_bbox_feats.size(0), -1))
-            # contrast_bbox_feats = self.fwd_fc(contrast_bbox_feats.view(contrast_bbox_feats.size(0), -1))
             contrast_bbox_feats = F.normalize(contrast_bbox_feats, dim=1)
 
         saug_rois_gt = bbox2roi([res for res in saug_bboxes])
@@ -386,12 +388,12 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
             all_pos_logit_pseudo.append(torch.zeros(0, 128).to(pos_labels.device))
         
         for i in range(pos_labels.size(0)):
-            pos_inds = pos_gt_map == pos_gt_map[i]
-            pos_logits = pos_bbox_feats[pos_inds, :]
+            pos_inds = pos_gt_map_ctr == pos_gt_map[i]
+            pos_logits = contrast_bbox_feats_gt[pos_inds, :]
             # TODO 存在不够的情况 暂不清楚原因
-            # if pos_logits.size(0) == 0:
-            #     pos_inds = pos_gt_map == pos_gt_map[i]
-            #     pos_logits = pos_bbox_feats[pos_inds, :]
+            if pos_logits.size(0) == 0:
+                pos_inds = pos_gt_map == pos_gt_map[i]
+                pos_logits = pos_bbox_feats_ctr[pos_inds, :]
             for j in range(self.ori_pos_k):
                 rand_index = torch.randint(low=0, high=pos_logits.size(0), size=(1,))
                 pos_logit = pos_logits[rand_index, :]
