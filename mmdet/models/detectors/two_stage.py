@@ -185,32 +185,31 @@ class TwoStageDetector(BaseDetector):
             proposal_list = proposals
 
         if 'saug1' in kwargs.keys():
-            with torch.no_grad():
-                x_saug = self.extract_feat(kwargs['saug1']['img'])
-                kwargs['x_saug1'] = x_saug
-                kwargs['aug_gt_bboxes1'] = kwargs['saug1']['gt_bboxes']
-                kwargs['aug_gt_labels1'] = kwargs['saug1']['gt_labels']
-                _, aug_proposal_list = self.rpn_head.forward_train(
-                    x_saug,
-                    kwargs['saug1']['img_metas'],
-                    kwargs['aug_gt_bboxes1'],
-                    gt_labels=None,
-                    gt_bboxes_ignore=gt_bboxes_ignore,
-                    proposal_cfg=proposal_cfg)
-                kwargs['aug_proposal_list1'] = aug_proposal_list
-
-                x_saug = self.extract_feat(kwargs['saug2']['img'])
-                kwargs['x_saug2'] = x_saug
-                kwargs['aug_gt_bboxes2'] = kwargs['saug2']['gt_bboxes']
-                kwargs['aug_gt_labels2'] = kwargs['saug2']['gt_labels']
-                _, aug_proposal_list = self.rpn_head.forward_train(
-                    x_saug,
-                    kwargs['saug2']['img_metas'],
-                    kwargs['aug_gt_bboxes2'],
-                    gt_labels=None,
-                    gt_bboxes_ignore=gt_bboxes_ignore,
-                    proposal_cfg=proposal_cfg)
-                kwargs['aug_proposal_list2'] = aug_proposal_list
+            x_saug = self.extract_feat(kwargs['saug1']['img'])
+            kwargs['x_saug1'] = x_saug
+            kwargs['aug_gt_bboxes1'] = kwargs['saug1']['gt_bboxes']
+            kwargs['aug_gt_labels1'] = kwargs['saug1']['gt_labels']
+            _, aug_proposal_list = self.rpn_head.forward_train(
+                x_saug,
+                kwargs['saug1']['img_metas'],
+                kwargs['aug_gt_bboxes1'],
+                gt_labels=None,
+                gt_bboxes_ignore=gt_bboxes_ignore,
+                proposal_cfg=proposal_cfg)
+            kwargs['aug_proposal_list1'] = aug_proposal_list
+            
+            x_saug = self.extract_feat(kwargs['saug2']['img'])
+            kwargs['x_saug2'] = x_saug
+            kwargs['aug_gt_bboxes2'] = kwargs['saug2']['gt_bboxes']
+            kwargs['aug_gt_labels2'] = kwargs['saug2']['gt_labels']
+            _, aug_proposal_list = self.rpn_head.forward_train(
+                x_saug,
+                kwargs['saug2']['img_metas'],
+                kwargs['aug_gt_bboxes2'],
+                gt_labels=None,
+                gt_bboxes_ignore=gt_bboxes_ignore,
+                proposal_cfg=proposal_cfg)
+            kwargs['aug_proposal_list2'] = aug_proposal_list
 
         roi_losses = self.roi_head.forward_train(x, img_metas, proposal_list,
                                                  gt_bboxes, gt_labels,
@@ -266,64 +265,62 @@ class TwoStageDetector(BaseDetector):
             proposal_list = proposals
 
         if 'saug1' in kwargs.keys():
-            with torch.no_grad():
-                x_saug_labeled = self.extract_feat(kwargs['saug1']['img'][:len(img) // 2])
-                kwargs['x_saug1'] = x_saug_labeled
-                kwargs['aug_gt_bboxes1'] = kwargs['saug1']['gt_bboxes'][:len(img) // 2]
-                kwargs['aug_gt_labels1'] = kwargs['saug1']['gt_labels'][:len(img) // 2]
-                _, aug_proposal_list = self.rpn_head.forward_train(
-                    x_saug_labeled,
-                    kwargs['saug1']['img_metas'][:len(img) // 2],
-                    kwargs['aug_gt_bboxes1'],
-                    gt_labels=None,
-                    gt_bboxes_ignore=gt_bboxes_ignore,
-                    proposal_cfg=proposal_cfg)
-                kwargs['aug_proposal_list1'] = aug_proposal_list
+            x_saug_labeled = self.extract_feat(kwargs['saug1']['img'][:len(img) // 2])
+            kwargs['x_saug1'] = x_saug_labeled
+            kwargs['aug_gt_bboxes1'] = kwargs['saug1']['gt_bboxes'][:len(img) // 2]
+            kwargs['aug_gt_labels1'] = kwargs['saug1']['gt_labels'][:len(img) // 2]
+            _, aug_proposal_list = self.rpn_head.forward_train(
+                x_saug_labeled,
+                kwargs['saug1']['img_metas'][:len(img) // 2],
+                kwargs['aug_gt_bboxes1'],
+                gt_labels=None,
+                gt_bboxes_ignore=gt_bboxes_ignore,
+                proposal_cfg=proposal_cfg)
+            kwargs['aug_proposal_list1'] = aug_proposal_list
 
-                x_saug_labeled = self.extract_feat(kwargs['saug2']['img'][:len(img) // 2])
-                kwargs['x_saug2'] = x_saug_labeled
-                kwargs['aug_gt_bboxes2'] = kwargs['saug2']['gt_bboxes'][:len(img) // 2]
-                kwargs['aug_gt_labels2'] = kwargs['saug2']['gt_labels'][:len(img) // 2]
-                _, aug_proposal_list = self.rpn_head.forward_train(
-                    x_saug_labeled,
-                    kwargs['saug2']['img_metas'][:len(img) // 2],
-                    kwargs['aug_gt_bboxes2'],
-                    gt_labels=None,
-                    gt_bboxes_ignore=gt_bboxes_ignore,
-                    proposal_cfg=proposal_cfg)
-                kwargs['aug_proposal_list2'] = aug_proposal_list
+            x_saug_labeled = self.extract_feat(kwargs['saug2']['img'][:len(img) // 2])
+            kwargs['x_saug2'] = x_saug_labeled
+            kwargs['aug_gt_bboxes2'] = kwargs['saug2']['gt_bboxes'][:len(img) // 2]
+            kwargs['aug_gt_labels2'] = kwargs['saug2']['gt_labels'][:len(img) // 2]
+            _, aug_proposal_list = self.rpn_head.forward_train(
+                x_saug_labeled,
+                kwargs['saug2']['img_metas'][:len(img) // 2],
+                kwargs['aug_gt_bboxes2'],
+                gt_labels=None,
+                gt_bboxes_ignore=gt_bboxes_ignore,
+                proposal_cfg=proposal_cfg)
+            kwargs['aug_proposal_list2'] = aug_proposal_list
 
         roi_losses = self.roi_head.forward_train(label_x, label_img_metas, proposal_list,
                                                  label_gt_bboxes, label_gt_labels,
                                                  gt_bboxes_ignore, gt_masks, label_gt_tags,
                                                  **kwargs)
         if 'saug1' in kwargs.keys():
-            with torch.no_grad():
-                x_saug_unlabeled = self.extract_feat(kwargs['saug1']['img'][len(img) // 2:])
-                kwargs['x_saug1'] = x_saug_unlabeled
-                kwargs['aug_gt_bboxes1'] = kwargs['saug1']['gt_bboxes'][len(img) // 2:]
-                kwargs['aug_gt_labels1'] = kwargs['saug1']['gt_labels'][len(img) // 2:]
-                _, aug_proposal_list = self.rpn_head.forward_train(
-                    x_saug_labeled,
-                    kwargs['saug1']['img_metas'][len(img) // 2:],
-                    kwargs['aug_gt_bboxes1'],
-                    gt_labels=None,
-                    gt_bboxes_ignore=gt_bboxes_ignore,
-                    proposal_cfg=proposal_cfg)
-                kwargs['aug_proposal_list1'] = aug_proposal_list
+            x_saug_unlabeled = self.extract_feat(kwargs['saug1']['img'][len(img) // 2:])
+            kwargs['x_saug1'] = x_saug_unlabeled
+            kwargs['aug_gt_bboxes1'] = kwargs['saug1']['gt_bboxes'][len(img) // 2:]
+            kwargs['aug_gt_labels1'] = kwargs['saug1']['gt_labels'][len(img) // 2:]
+            _, aug_proposal_list = self.rpn_head.forward_train(
+                x_saug_labeled,
+                kwargs['saug1']['img_metas'][len(img) // 2:],
+                kwargs['aug_gt_bboxes1'],
+                gt_labels=None,
+                gt_bboxes_ignore=gt_bboxes_ignore,
+                proposal_cfg=proposal_cfg)
+            kwargs['aug_proposal_list1'] = aug_proposal_list
 
-                x_saug_unlabeled = self.extract_feat(kwargs['saug2']['img'][len(img) // 2:])
-                kwargs['x_saug2'] = x_saug_unlabeled
-                kwargs['aug_gt_bboxes2'] = kwargs['saug2']['gt_bboxes'][len(img) // 2:]
-                kwargs['aug_gt_labels2'] = kwargs['saug2']['gt_labels'][len(img) // 2:]
-                _, aug_proposal_list = self.rpn_head.forward_train(
-                    x_saug_labeled,
-                    kwargs['saug2']['img_metas'][len(img) // 2:],
-                    kwargs['aug_gt_bboxes2'],
-                    gt_labels=None,
-                    gt_bboxes_ignore=gt_bboxes_ignore,
-                    proposal_cfg=proposal_cfg)
-                kwargs['aug_proposal_list2'] = aug_proposal_list
+            x_saug_unlabeled = self.extract_feat(kwargs['saug2']['img'][len(img) // 2:])
+            kwargs['x_saug2'] = x_saug_unlabeled
+            kwargs['aug_gt_bboxes2'] = kwargs['saug2']['gt_bboxes'][len(img) // 2:]
+            kwargs['aug_gt_labels2'] = kwargs['saug2']['gt_labels'][len(img) // 2:]
+            _, aug_proposal_list = self.rpn_head.forward_train(
+                x_saug_labeled,
+                kwargs['saug2']['img_metas'][len(img) // 2:],
+                kwargs['aug_gt_bboxes2'],
+                gt_labels=None,
+                gt_bboxes_ignore=gt_bboxes_ignore,
+                proposal_cfg=proposal_cfg)
+            kwargs['aug_proposal_list2'] = aug_proposal_list
 
         un_roi_losses = self.roi_head.forward_train(unlabel_x, unlabel_img_metas, un_proposal_list,
                                                  unlabel_gt_bboxes, unlabel_gt_labels,
