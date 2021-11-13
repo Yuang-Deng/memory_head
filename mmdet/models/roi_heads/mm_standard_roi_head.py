@@ -19,10 +19,12 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
 
     def init_mem_bank(self):
 
-        self.mem_fc = torch.nn.Sequential(torch.nn.Linear(12544, 1024), torch.nn.ReLU(), torch.nn.Linear(1024, 128))
-        self.fwd_fc = torch.nn.Sequential(torch.nn.Linear(12544, 1024), torch.nn.ReLU(), torch.nn.Linear(1024, 128))
+        self.dim = 64
 
-        self.register_buffer("queue_vector", torch.randn(self.memory_k, 128)) 
+        self.mem_fc = torch.nn.Sequential(torch.nn.Linear(12544, 1024), torch.nn.ReLU(), torch.nn.Linear(1024, self.dim))
+        self.fwd_fc = torch.nn.Sequential(torch.nn.Linear(12544, 1024), torch.nn.ReLU(), torch.nn.Linear(1024, self.dim))
+
+        self.register_buffer("queue_vector", torch.randn(self.memory_k, self.dim)) 
         self.queue_vector = F.normalize(self.queue_vector, dim=1)
         self.register_buffer("queue_label", torch.ones(self.memory_k).long() * 0)
         self.register_buffer("queue_boxes", torch.ones(self.memory_k, 4).long())
@@ -205,6 +207,7 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
             if gt_bboxes_ignore is None:
                 gt_bboxes_ignore = [None for _ in range(num_imgs)]
             sampling_results = []
+            sampling_results_anchor = []
             sampling_results_ctr = []
             for i in range(num_imgs):
                 assign_result = self.bbox_assigner.assign(
@@ -218,16 +221,29 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
                     feats=[lvl_feat[i][None] for lvl_feat in x])
                 sampling_results.append(sampling_result)
 
+                assign_result_anchor = self.bbox_assigner.assign(
+                    kwargs['aug_proposal_list1'][i], kwargs['aug_gt_bboxes1'][i], gt_bboxes_ignore[i],
+                    kwargs['aug_gt_labels1'][i])
+                sampling_result_anchor = self.bbox_sampler.sample(
+                    assign_result_anchor,
+                    kwargs['aug_proposal_list1'][i],
+                    kwargs['aug_gt_bboxes1'][i],
+                    kwargs['aug_gt_labels1'][i],
+                    feats=[lvl_feat[i][None] for lvl_feat in kwargs['x_saug1']])
+                sampling_results_anchor.append(sampling_result_anchor)
+
                 assign_result_ctr = self.bbox_assigner.assign(
-                    kwargs['aug_proposal_list'][i], kwargs['aug_gt_bboxes'][i], gt_bboxes_ignore[i],
-                    kwargs['aug_gt_labels'][i])
+                    kwargs['aug_proposal_list2'][i], kwargs['aug_gt_bboxes2'][i], gt_bboxes_ignore[i],
+                    kwargs['aug_gt_labels2'][i])
                 sampling_result_ctr = self.bbox_sampler.sample(
                     assign_result_ctr,
-                    kwargs['aug_proposal_list'][i],
-                    kwargs['aug_gt_bboxes'][i],
-                    kwargs['aug_gt_labels'][i],
-                    feats=[lvl_feat[i][None] for lvl_feat in kwargs['x_saug']])
+                    kwargs['aug_proposal_list2'][i],
+                    kwargs['aug_gt_bboxes2'][i],
+                    kwargs['aug_gt_labels2'][i],
+                    feats=[lvl_feat[i][None] for lvl_feat in kwargs['x_saug2']])
                 sampling_results_ctr.append(sampling_result_ctr)
+
+            kwargs['sampling_results_anchor'] = sampling_results_anchor
             kwargs['sampling_results_ctr'] = sampling_results_ctr
 
         losses = dict()
@@ -274,43 +290,96 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
             bbox_feats=bbox_feats)
         return bbox_results
     
-    def _unlabel_interp_bbox_forward(self, x, rois, labels):
+    def _contrast_bbox_forwardV2(self, x, rois, x_saug_anchor, x_saug_ctr, bboxes_ctr, 
+                                labels_ctr, sampling_results_ctr, sampling_results_anchor):
         """Box head forward function used in both training and testing."""
         # TODO: a more flexible way to decide which feature maps to use
-        pos_inds = (labels >= 0) & (labels < self.bbox_head.num_classes)
         bbox_feats = self.bbox_roi_extractor(
             x[:self.bbox_roi_extractor.num_inputs], rois)
         if self.with_shared_head:
             bbox_feats = self.shared_head(bbox_feats)
-
-        pos_labels = labels[pos_inds]
-        pos_bbox_feats = bbox_feats[pos_inds].view(pos_labels.size(0), -1)
-
-        neg_bbox_feats = bbox_feats[~pos_inds].view(labels.size(0) - pos_labels.size(0), -1)
-
-        dot_sum = torch.einsum('ik,jk->ij', [pos_bbox_feats, self.queue_vector])
-        vector_norm = torch.norm(pos_bbox_feats, dim=-1, p=2)
-        memory_norm = torch.norm(self.queue_vector, dim=-1, p=2)
-        norm_mul = torch.einsum('i,j->ij', [vector_norm, memory_norm])
-        cos_sim = dot_sum / norm_mul
-
-        add_sim = torch.zeros(0, self.top_k).to(pos_labels.device)
-        add_label = torch.zeros(0).to(pos_labels.device).long()
-        add_boxes = torch.zeros(0, 4).to(pos_labels.device).long()
-        add_feat = torch.zeros(0, self.queue_vector.size(1)).to(pos_labels.device)
-        
-        for i in range(pos_labels.size(0)):
-            neg_cls_inds = (self.queue_label != pos_labels[i]) & (self.queue_label != 30)
-            _, neg_inds = torch.topk(cos_sim[i][neg_cls_inds], self.top_k)
-            add_sim = torch.cat([add_sim, cos_sim[i][neg_cls_inds][neg_inds][None,:]])
-            cur_interp_feat = self.interpolation_feature_augment(neg_bbox_feats[random.randint(0, neg_bbox_feats.size(0), neg_inds.size(0))], self.queue_vector[neg_inds])
-            add_feat = torch.cat([add_feat, cur_interp_feat], dim=0)
-            add_label = torch.cat([add_label, self.queue_label[neg_inds]])
-            add_boxes = torch.cat([add_boxes, self.queue_boxes[neg_inds]])
-
         cls_score, mid_cls_score, mid_det_score, bbox_pred = self.bbox_head(bbox_feats)
 
-        add_cls_score, _, _, add_bbox_pred = self.bbox_head(add_feat.view(add_feat.size(0), bbox_feats.size(1), bbox_feats.size(2), bbox_feats.size(3)))
+        device = rois.device
+        batch = sampling_results_anchor[0].bboxes.size(0)
+        pos_inds_anchor = torch.zeros([0]).to(device).long()
+        pos_gt_map_anchor = torch.zeros([0]).to(device).long()
+        pos_gt_map_ctr = torch.zeros([0]).to(device).long()
+        pos_labels_anchor = torch.zeros([0]).to(device).long()
+        pos_labels_ctr = torch.zeros([0]).to(device).long()
+        for i, (res_anchor, res_ctr) in enumerate(zip(sampling_results_anchor, sampling_results_ctr)):
+            pos_inds_anchor = torch.cat([pos_inds_anchor, (torch.arange(0, res_anchor.pos_inds.size(0)).to(device).long() + (i * batch)).view(-1)])
+            pos_gt_map_anchor = torch.cat([pos_gt_map_anchor, (res_anchor.pos_assigned_gt_inds+ (i * batch)).view(-1)])
+            pos_gt_map_ctr = torch.cat([pos_gt_map_ctr, (res_ctr.pos_assigned_gt_inds+ (i * batch)).view(-1)])
+            pos_labels_anchor = torch.cat([pos_labels_anchor, res_anchor.pos_gt_labels])
+            pos_labels_ctr = torch.cat([pos_labels_ctr, res_ctr.pos_gt_labels])
+
+        # 需要弱增强的proposal，强增强的proposal，强增强的gt
+        with torch.no_grad():
+            rois_anchor = bbox2roi([res.pos_bboxes for res in sampling_results_anchor])
+            bbox_feats_anchor = self.bbox_roi_extractor(
+                x_saug_anchor[:self.bbox_roi_extractor.num_inputs], rois_anchor)
+
+            rois_ctr = bbox2roi([res.pos_bboxes for res in sampling_results_ctr])
+            bbox_feats_rois_ctr = self.bbox_roi_extractor(
+                x_saug_ctr[:self.bbox_roi_extractor.num_inputs], rois_ctr)
+            bbox_feats_rois_ctr = self.mem_fc(bbox_feats_rois_ctr.view(bbox_feats_rois_ctr.size(0), -1))
+            bbox_feats_rois_ctr = F.normalize(bbox_feats_rois_ctr, dim=1)
+
+            gt_ctr = bbox2roi(bboxes_ctr)
+            bbox_feats_gt_ctr = self.bbox_roi_extractor(
+                x_saug_ctr[:self.bbox_roi_extractor.num_inputs], gt_ctr)
+            bbox_feats_gt_ctr = self.mem_fc(bbox_feats_gt_ctr.view(bbox_feats_gt_ctr.size(0), -1))
+            bbox_feats_gt_ctr = F.normalize(bbox_feats_gt_ctr, dim=1)
+            labels_gt_ctr = torch.cat(labels_ctr)
+        bbox_feats_anchor = self.fwd_fc(bbox_feats_anchor.view(bbox_feats_anchor.size(0), -1))
+        bbox_feats_anchor = F.normalize(bbox_feats_anchor, dim=1)
+
+        all_ori_pos_logit_pseudo = []
+        for _ in range(self.ori_pos_k):
+            all_ori_pos_logit_pseudo.append(torch.zeros(0, self.dim).to(device))
+
+        all_pos_logit_pseudo = []
+        for _ in range(self.pos_k):
+            all_pos_logit_pseudo.append(torch.zeros(0, self.dim).to(device))
+
+        for i in range(pos_labels_anchor.size(0)):
+            pos_inds = pos_gt_map_ctr == pos_gt_map_anchor[i]
+            pos_logits = bbox_feats_rois_ctr[pos_inds, :]
+            if pos_logits.size(0) == 0:
+                pos_inds = pos_gt_map_anchor == pos_gt_map_anchor[i]
+                pos_logits = bbox_feats_anchor[pos_inds, :]
+            for j in range(self.ori_pos_k):
+                rand_index = torch.randint(low=0, high=pos_logits.size(0), size=(1,))
+                pos_logit = pos_logits[rand_index, :]
+                all_ori_pos_logit_pseudo[j] = torch.cat([all_ori_pos_logit_pseudo[j], pos_logit], dim=0)
+
+            # GT找和proposal找都试一下
+            pos_inds = labels_gt_ctr == pos_labels_anchor[i]
+            pos_logits = bbox_feats_gt_ctr[pos_inds, :]
+            for j in range(self.pos_k):
+                rand_index = torch.randint(low=0, high=pos_logits.size(0), size=(1,))
+                pos_logit = pos_logits[rand_index, :]
+                all_pos_logit_pseudo[j] = torch.cat([all_pos_logit_pseudo[j], pos_logit], dim=0)
+
+        re_logits = []
+        neg_logits = torch.einsum('nc,kc->nk', [bbox_feats_anchor, self.queue_vector.clone().detach()])
+        for i in range(self.pos_k):
+            pos_logits = torch.einsum('nc,nc->n', [bbox_feats_anchor, all_pos_logit_pseudo[i]])
+            logits = torch.cat([pos_logits[:, None], neg_logits], dim=1)
+            logits /= self.T
+            re_logits.append(logits)
+        
+        re_ori_logits = []
+        for i in range(self.ori_pos_k):
+            pos_logits = torch.einsum('nc,nc->n', [bbox_feats_anchor, all_ori_pos_logit_pseudo[i]])
+            logits = torch.cat([pos_logits[:, None], neg_logits], dim=1)
+            logits /= self.T
+            re_ori_logits.append(logits)
+
+        labels = torch.zeros(logits.shape[0], dtype=torch.long).cuda()
+
+        self._dequeue_and_enqueue(bbox_feats_gt_ctr, labels_gt_ctr)
 
         bbox_results = dict(
             cls_score=cls_score,
@@ -318,16 +387,13 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
             mid_det_score=mid_det_score,
             bbox_pred=bbox_pred,
             bbox_feats=bbox_feats,
-            fg_anchor=pos_bbox_feats,
-            add_feat=add_feat,
-            add_sim=add_sim,
-            add_cls_score=add_cls_score,
-            add_bbox_pred=add_bbox_pred,
-            add_label=add_label,
-            add_boxes=add_boxes)
+            logits=re_logits,
+            ori_logits=re_ori_logits,
+            labels=labels,)
         return bbox_results
     
-    def _contrast_bbox_forward(self, x, rois, labels, x_saug, saug_bboxes, saug_labels, sampling_results, sampling_results_ctr):
+    def _contrast_bbox_forward(self, x, rois, labels, x_saug, saug_bboxes, 
+                                saug_labels, sampling_results, sampling_results_ctr, sampling_results_anchor):
         """Box head forward function used in both training and testing."""
         # TODO: a more flexible way to decide which feature maps to use
         # pos_inds = (labels >= 0) & (labels < self.bbox_head.num_classes)
@@ -338,12 +404,11 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
         pos_gt_map = torch.zeros([0]).to(device).long()
         pos_gt_map_ctr = torch.zeros([0]).to(device).long()
         pos_labels = torch.zeros([0]).to(device).long()
-        for i, (res, res_ctr) in enumerate(zip(sampling_results, sampling_results_ctr)):
+        for i, (res, res_anchor, res_ctr) in enumerate(zip(sampling_results, sampling_results_anchor, sampling_results_ctr)):
             pos_inds = torch.cat([pos_inds, (torch.arange(0, res.pos_inds.size(0)).to(device).long() + (i * batch)).view(-1)])
             pos_gt_map = torch.cat([pos_gt_map, (res.pos_assigned_gt_inds+ (i * batch)).view(-1)])
             pos_gt_map_ctr = torch.cat([pos_gt_map_ctr, (res_ctr.pos_assigned_gt_inds+ (i * batch)).view(-1)])
             pos_labels = torch.cat([pos_labels, res.pos_gt_labels])
-
 
         bbox_feats = self.bbox_roi_extractor(
             x[:self.bbox_roi_extractor.num_inputs], rois)
@@ -375,11 +440,11 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
 
         all_ori_pos_logit_pseudo = []
         for _ in range(self.ori_pos_k):
-            all_ori_pos_logit_pseudo.append(torch.zeros(0, 128).to(pos_labels.device))
+            all_ori_pos_logit_pseudo.append(torch.zeros(0, self.dim).to(pos_labels.device))
 
         all_pos_logit_pseudo = []
         for _ in range(self.pos_k):
-            all_pos_logit_pseudo.append(torch.zeros(0, 128).to(pos_labels.device))
+            all_pos_logit_pseudo.append(torch.zeros(0, self.dim).to(pos_labels.device))
         
         for i in range(pos_labels.size(0)):
             # pos_inds = pos_gt_map_ctr == pos_gt_map[i]
@@ -439,8 +504,13 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
         rois = bbox2roi([res.bboxes for res in sampling_results])
         bbox_targets = self.bbox_head.get_targets(sampling_results, gt_bboxes,
                                                   gt_labels, self.train_cfg)
-        x_saug = kwargs['x_saug']
-        bbox_results = self._contrast_bbox_forward(x, rois, bbox_targets[0], x_saug, kwargs['aug_gt_bboxes'], kwargs['aug_gt_labels'], sampling_results, kwargs['sampling_results_ctr'])
+
+        bbox_results = self._contrast_bbox_forwardV2(x, rois, kwargs['x_saug1'], kwargs['x_saug2'], 
+                                                    kwargs['aug_gt_bboxes2'], 
+                                                    kwargs['aug_gt_labels2'], 
+                                                    kwargs['sampling_results_ctr'],
+                                                    kwargs['sampling_results_anchor'])
+
         split_list = [sr.bboxes.size(0) for sr in sampling_results]
         
         loss_bbox = self.bbox_head.loss(bbox_results['cls_score'],

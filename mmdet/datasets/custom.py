@@ -236,11 +236,18 @@ class CustomDataset(Dataset):
         if self.w_s_aug:
             img_info = self.data_infos[idx]
             ann_info = self.get_ann_info(idx)
-            resultss = dict(img_info=img_info, ann_info=ann_info)
+            resultss1 = dict(img_info=img_info, ann_info=ann_info)
             if self.proposals is not None:
-                resultss['proposals'] = self.proposals[idx]
-            self.pre_pipeline(resultss)
-            return [self.pipeline(results), self.pipelines(resultss)]
+                resultss1['proposals'] = self.proposals[idx]
+            self.pre_pipeline(resultss1)
+            
+            img_info = self.data_infos[idx]
+            ann_info = self.get_ann_info(idx)
+            resultss2 = dict(img_info=img_info, ann_info=ann_info)
+            if self.proposals is not None:
+                resultss2['proposals'] = self.proposals[idx]
+            self.pre_pipeline(resultss2)
+            return [self.pipeline(results), self.pipelines(resultss1), self.pipeline(resultss2)]
         else:
             return self.pipeline(results)
 

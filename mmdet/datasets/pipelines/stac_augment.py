@@ -261,13 +261,17 @@ class GaussianBlur(object):
 
 @PIPELINES.register_module()
 class MOCOTransform:
-    def __init__(self, gray_p=0.2, gaussian_sigma=[.1, 2.], gaussian_p=0.5):
+    def __init__(self, gray_p=0.2, gaussian_sigma=[.1, 2.], gaussian_p=0.5, color_jitter_p=0.8):
         self.random_gray_scale = torchvision.transforms.RandomGrayscale(p=gray_p)
         self.random_gaussian_blur = torchvision.transforms.RandomApply([GaussianBlur(sigma=gaussian_sigma)], p=gaussian_p)
+        self.random_colorjitter = torchvision.transforms.RandomApply([
+                transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)  # not strengthened
+            ], p=color_jitter_p),
     
     def __call__(self, results):
         img = results['img']
         img = Image.fromarray(np.uint8(img))
+        img = self.random_colorjitter[0](img)
         img = self.random_gray_scale(img)
         img = self.random_gaussian_blur(img)
         img = np.asarray(img)

@@ -236,7 +236,8 @@ class BaseDetector(BaseModule, metaclass=ABCMeta):
                   averaging the logs.
         """
         if isinstance(data, list):
-            data[0]['saug'] = data[1]
+            data[0]['saug1'] = data[1]
+            data[0]['saug2'] = data[2]
             data = data[0]
         if mem_forward:
             self.forward_mem(**data)

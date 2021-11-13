@@ -16,7 +16,7 @@ model = dict(
     ),
     roi_head=dict(
         type='MMStandardRoIHead',
-        contrastive_lambda=0,
+        contrastive_lambda=1,
         contrastive_lambda_ori=1,
         ori_pos_k=1,
         warm_epoch=0,
