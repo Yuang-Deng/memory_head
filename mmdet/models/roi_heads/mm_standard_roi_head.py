@@ -382,11 +382,13 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
             all_pos_logit_pseudo.append(torch.zeros(0, 128).to(pos_labels.device))
         
         for i in range(pos_labels.size(0)):
-            pos_inds = pos_gt_map_ctr == pos_gt_map[i]
-            pos_logits = contrast_bbox_feats_ctr[pos_inds, :]
-            if pos_logits.size(0) == 0:
-                pos_inds = pos_gt_map == pos_gt_map[i]
-                pos_logits = pos_bbox_feats_ctr[pos_inds, :]
+            # pos_inds = pos_gt_map_ctr == pos_gt_map[i]
+            # pos_logits = contrast_bbox_feats_ctr[pos_inds, :]
+            pos_inds = pos_gt_map == pos_gt_map[i]
+            pos_logits = pos_bbox_feats_ctr[pos_inds, :]
+            # if pos_logits.size(0) == 0:
+            #     pos_inds = pos_gt_map == pos_gt_map[i]
+            #     pos_logits = pos_bbox_feats_ctr[pos_inds, :]
             for j in range(self.ori_pos_k):
                 rand_index = torch.randint(low=0, high=pos_logits.size(0), size=(1,))
                 pos_logit = pos_logits[rand_index, :]
