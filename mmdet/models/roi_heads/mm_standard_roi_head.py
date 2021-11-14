@@ -19,8 +19,6 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
 
     def init_mem_bank(self):
 
-        self.dim = 64
-
         self.mem_fc = torch.nn.Sequential(torch.nn.Linear(12544, 1024), torch.nn.ReLU(), torch.nn.Linear(1024, self.dim))
         self.fwd_fc = torch.nn.Sequential(torch.nn.Linear(12544, 1024), torch.nn.ReLU(), torch.nn.Linear(1024, self.dim))
 

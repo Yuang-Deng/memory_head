@@ -28,6 +28,7 @@ class MMBaseRoIHead(BaseModule, metaclass=ABCMeta):
                  ema=0.99,
                  pos_k=3,
                  ori_pos_k=1,
+                 ctr_dim=128,
                  contrastive_lambda_ori=1,
                  top_k=16):
         super(MMBaseRoIHead, self).__init__(init_cfg)
@@ -43,6 +44,7 @@ class MMBaseRoIHead(BaseModule, metaclass=ABCMeta):
         self.ema = ema
         self.pos_k = pos_k
         self.ori_pos_k = ori_pos_k
+        self.dim = ctr_dim
         self.contrastive_lambda_ori = contrastive_lambda_ori
         if shared_head is not None:
             shared_head.pretrained = pretrained
