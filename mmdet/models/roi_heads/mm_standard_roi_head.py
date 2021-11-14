@@ -165,7 +165,7 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
         mem_gt_boxes = torch.cat(gt_bboxes)
         mem_bbox_feats = bbox_feats.view(bbox_feats.size(0), -1)
         with torch.no_grad():
-            mem_bbox_feats = self.fwd_fc(mem_bbox_feats)
+            mem_bbox_feats = self.mem_fc(mem_bbox_feats)
             mem_bbox_feats = F.normalize(mem_bbox_feats, dim=1)
         self._dequeue_and_enqueue(mem_bbox_feats.detach(), mem_gt_label.detach(), mem_gt_boxes.detach())
 
@@ -322,13 +322,15 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
         rois_ctr = bbox2roi([res.pos_bboxes for res in sampling_results_ctr])
         bbox_feats_rois_ctr = self.bbox_roi_extractor(
             x_saug_ctr[:self.bbox_roi_extractor.num_inputs], rois_ctr)
-        bbox_feats_rois_ctr = self.mem_fc(bbox_feats_rois_ctr.view(bbox_feats_rois_ctr.size(0), -1))
+        # bbox_feats_rois_ctr = self.mem_fc(bbox_feats_rois_ctr.view(bbox_feats_rois_ctr.size(0), -1))
+        bbox_feats_rois_ctr = self.fwd_fc(bbox_feats_rois_ctr.view(bbox_feats_rois_ctr.size(0), -1))
         bbox_feats_rois_ctr = F.normalize(bbox_feats_rois_ctr, dim=1)
 
         gt_ctr = bbox2roi(bboxes_ctr)
         bbox_feats_gt_ctr = self.bbox_roi_extractor(
             x_saug_ctr[:self.bbox_roi_extractor.num_inputs], gt_ctr)
-        bbox_feats_gt_ctr = self.mem_fc(bbox_feats_gt_ctr.view(bbox_feats_gt_ctr.size(0), -1))
+        # bbox_feats_gt_ctr = self.mem_fc(bbox_feats_gt_ctr.view(bbox_feats_gt_ctr.size(0), -1))
+        bbox_feats_gt_ctr = self.fwd_fc(bbox_feats_gt_ctr.view(bbox_feats_gt_ctr.size(0), -1))
         bbox_feats_gt_ctr = F.normalize(bbox_feats_gt_ctr, dim=1)
         labels_gt_ctr = torch.cat(labels_ctr)
 
@@ -354,6 +356,11 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
             # GT找和proposal找都试一下
             pos_inds = labels_gt_ctr == pos_labels_anchor[i]
             pos_logits = bbox_feats_gt_ctr[pos_inds, :]
+            # pos_inds = pos_labels_ctr == pos_labels_anchor[i]
+            # pos_logits = bbox_feats_rois_ctr[pos_inds, :]
+            # if pos_logits.size(0) == 0:
+            #     pos_inds = labels_gt_ctr == pos_labels_anchor[i]
+            #     pos_logits = bbox_feats_gt_ctr[pos_inds, :]
             for j in range(self.pos_k):
                 rand_index = torch.randint(low=0, high=pos_logits.size(0), size=(1,))
                 pos_logit = pos_logits[rand_index, :]

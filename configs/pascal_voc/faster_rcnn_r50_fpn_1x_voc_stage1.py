@@ -16,14 +16,15 @@ model = dict(
     ),
     roi_head=dict(
         type='MMStandardRoIHead',
-        contrastive_lambda=1,
-        contrastive_lambda_ori=1,
+        contrastive_lambda=0.1,
+        contrastive_lambda_ori=0.1,
         ori_pos_k=1,
         warm_epoch=0,
         memory_k=12613,
         pos_k=1,
         T=0.1,
         ema=0.99,
+        ctr_dim=128,
         bbox_head=dict(
             type='MMShared2FCBBoxHead',
             num_classes=20,
@@ -40,7 +41,7 @@ model = dict(
     ),
 )
 # optimizer
-optimizer = dict(type='SGD', lr=0.01, momentum=0.9, weight_decay=0.0001)
+optimizer = dict(type='SGD', lr=0.005, momentum=0.9, weight_decay=0.0001)
 custom_hooks = [dict(type='NumClassCheckHook'), dict(type='MEMEMAHook')]
 optimizer_config = dict(grad_clip=None)
 # learning policy
