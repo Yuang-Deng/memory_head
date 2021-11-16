@@ -354,13 +354,13 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
                 all_ori_pos_logit_pseudo[j] = torch.cat([all_ori_pos_logit_pseudo[j], pos_logit], dim=0)
 
             # GT找和proposal找都试一下
-            pos_inds = labels_gt_ctr == pos_labels_anchor[i]
-            pos_logits = bbox_feats_gt_ctr[pos_inds, :]
-            # pos_inds = pos_labels_ctr == pos_labels_anchor[i]
-            # pos_logits = bbox_feats_rois_ctr[pos_inds, :]
-            # if pos_logits.size(0) == 0:
-            #     pos_inds = labels_gt_ctr == pos_labels_anchor[i]
-            #     pos_logits = bbox_feats_gt_ctr[pos_inds, :]
+            # pos_inds = labels_gt_ctr == pos_labels_anchor[i]
+            # pos_logits = bbox_feats_gt_ctr[pos_inds, :]
+            pos_inds = pos_labels_ctr == pos_labels_anchor[i]
+            pos_logits = bbox_feats_rois_ctr[pos_inds, :]
+            if pos_logits.size(0) == 0:
+                pos_inds = labels_gt_ctr == pos_labels_anchor[i]
+                pos_logits = bbox_feats_gt_ctr[pos_inds, :]
             for j in range(self.pos_k):
                 rand_index = torch.randint(low=0, high=pos_logits.size(0), size=(1,))
                 pos_logit = pos_logits[rand_index, :]
