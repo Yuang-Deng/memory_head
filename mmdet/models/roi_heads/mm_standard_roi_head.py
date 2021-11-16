@@ -200,6 +200,7 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
             dict[str, Tensor]: a dictionary of loss components
         """
         # assign gts and sample proposals
+        ema_roi_head = kwargs['ema_roi_head']
         if self.with_bbox or self.with_mask:
             num_imgs = len(img_metas)
             if gt_bboxes_ignore is None:
@@ -230,10 +231,10 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
                     feats=[lvl_feat[i][None] for lvl_feat in kwargs['x_saug1']])
                 sampling_results_anchor.append(sampling_result_anchor)
 
-                assign_result_ctr = self.bbox_assigner.assign(
+                assign_result_ctr = ema_roi_head.bbox_assigner.assign(
                     kwargs['aug_proposal_list2'][i], kwargs['aug_gt_bboxes2'][i], gt_bboxes_ignore[i],
                     kwargs['aug_gt_labels2'][i])
-                sampling_result_ctr = self.bbox_sampler.sample(
+                sampling_result_ctr = ema_roi_head.bbox_sampler.sample(
                     assign_result_ctr,
                     kwargs['aug_proposal_list2'][i],
                     kwargs['aug_gt_bboxes2'][i],
@@ -289,7 +290,7 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
         return bbox_results
     
     def _contrast_bbox_forwardV2(self, x, rois, x_saug_anchor, x_saug_ctr, bboxes_ctr, 
-                                labels_ctr, sampling_results_ctr, sampling_results_anchor):
+                                labels_ctr, sampling_results_ctr, sampling_results_anchor, ema_roi_head):
         """Box head forward function used in both training and testing."""
         # TODO: a more flexible way to decide which feature maps to use
         bbox_feats = self.bbox_roi_extractor(
@@ -320,17 +321,17 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
         bbox_feats_anchor = F.normalize(bbox_feats_anchor, dim=1)
 
         rois_ctr = bbox2roi([res.pos_bboxes for res in sampling_results_ctr])
-        bbox_feats_rois_ctr = self.bbox_roi_extractor(
-            x_saug_ctr[:self.bbox_roi_extractor.num_inputs], rois_ctr)
+        bbox_feats_rois_ctr = ema_roi_head.bbox_roi_extractor(
+            x_saug_ctr[:ema_roi_head.bbox_roi_extractor.num_inputs], rois_ctr)
         # bbox_feats_rois_ctr = self.mem_fc(bbox_feats_rois_ctr.view(bbox_feats_rois_ctr.size(0), -1))
-        bbox_feats_rois_ctr = self.fwd_fc(bbox_feats_rois_ctr.view(bbox_feats_rois_ctr.size(0), -1))
+        bbox_feats_rois_ctr = self.mem_fc(bbox_feats_rois_ctr.view(bbox_feats_rois_ctr.size(0), -1))
         bbox_feats_rois_ctr = F.normalize(bbox_feats_rois_ctr, dim=1)
 
         gt_ctr = bbox2roi(bboxes_ctr)
-        bbox_feats_gt_ctr = self.bbox_roi_extractor(
-            x_saug_ctr[:self.bbox_roi_extractor.num_inputs], gt_ctr)
+        bbox_feats_gt_ctr = ema_roi_head.bbox_roi_extractor(
+            x_saug_ctr[:ema_roi_head.bbox_roi_extractor.num_inputs], gt_ctr)
         # bbox_feats_gt_ctr = self.mem_fc(bbox_feats_gt_ctr.view(bbox_feats_gt_ctr.size(0), -1))
-        bbox_feats_gt_ctr = self.fwd_fc(bbox_feats_gt_ctr.view(bbox_feats_gt_ctr.size(0), -1))
+        bbox_feats_gt_ctr = self.mem_fc(bbox_feats_gt_ctr.view(bbox_feats_gt_ctr.size(0), -1))
         bbox_feats_gt_ctr = F.normalize(bbox_feats_gt_ctr, dim=1)
         labels_gt_ctr = torch.cat(labels_ctr)
 
@@ -407,7 +408,7 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
                                                     kwargs['aug_gt_bboxes2'], 
                                                     kwargs['aug_gt_labels2'], 
                                                     kwargs['sampling_results_ctr'],
-                                                    kwargs['sampling_results_anchor'])
+                                                    kwargs['sampling_results_anchor'], kwargs['ema_roi_head'])
 
         split_list = [sr.bboxes.size(0) for sr in sampling_results]
         

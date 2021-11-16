@@ -198,11 +198,11 @@ class TwoStageDetector(BaseDetector):
                 proposal_cfg=proposal_cfg)
             kwargs['aug_proposal_list1'] = aug_proposal_list
             
-            x_saug = self.extract_feat(kwargs['saug2']['img'])
+            x_saug = self.extract_feat_ema(kwargs['saug2']['img'])
             kwargs['x_saug2'] = x_saug
             kwargs['aug_gt_bboxes2'] = kwargs['saug2']['gt_bboxes']
             kwargs['aug_gt_labels2'] = kwargs['saug2']['gt_labels']
-            _, aug_proposal_list = self.rpn_head.forward_train(
+            _, aug_proposal_list = self.ema_rpn_head.forward_train(
                 x_saug,
                 kwargs['saug2']['img_metas'],
                 kwargs['aug_gt_bboxes2'],
@@ -210,6 +210,8 @@ class TwoStageDetector(BaseDetector):
                 gt_bboxes_ignore=gt_bboxes_ignore,
                 proposal_cfg=proposal_cfg)
             kwargs['aug_proposal_list2'] = aug_proposal_list
+
+            kwargs['ema_roi_head'] = self.ema_roi_head
 
         roi_losses = self.roi_head.forward_train(x, img_metas, proposal_list,
                                                  gt_bboxes, gt_labels,

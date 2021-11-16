@@ -8,7 +8,7 @@ from .cornernet import CornerNet
 from .deformable_detr import DeformableDETR
 from .detr import DETR
 from .fast_rcnn import FastRCNN
-from .faster_rcnn import FasterRCNN
+from .faster_rcnn import FasterRCNN, EMAFasterRCNN
 from .fcos import FCOS
 from .fovea import FOVEA
 from .fsaf import FSAF
@@ -46,5 +46,5 @@ __all__ = [
     'NASFCOS', 'PointRend', 'GFL', 'CornerNet', 'PAA', 'YOLOV3', 'YOLACT',
     'VFNet', 'DETR', 'TridentFasterRCNN', 'SparseRCNN', 'SCNet', 'SOLO',
     'DeformableDETR', 'AutoAssign', 'YOLOF', 'CenterNet', 'YOLOX',
-    'TwoStagePanopticSegmentor', 'PanopticFPN'
+    'TwoStagePanopticSegmentor', 'PanopticFPN', 'EMAFasterRCNN'
 ]

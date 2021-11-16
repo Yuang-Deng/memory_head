@@ -247,7 +247,7 @@ class CustomDataset(Dataset):
             if self.proposals is not None:
                 resultss2['proposals'] = self.proposals[idx]
             self.pre_pipeline(resultss2)
-            return [self.pipeline(results), self.pipelines(resultss1), self.pipelines(resultss2)]
+            return [self.pipeline(results), self.pipeline(resultss1), self.pipelines(resultss2)]
         else:
             return self.pipeline(results)
 

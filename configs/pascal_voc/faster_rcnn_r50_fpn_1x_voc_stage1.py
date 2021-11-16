@@ -5,10 +5,11 @@ _base_ = [
 ]
 data_root = '/home/qiucm/workspace/dataset/VOCdevkit/'
 data = dict(
-    samples_per_gpu=2,
+    samples_per_gpu=4,
     workers_per_gpu=2,
 )
 model = dict(
+    type='EMAFasterRCNN',
     rpn_head=dict(
         anchor_generator=dict(
             scales=[8,16,32]
@@ -20,9 +21,9 @@ model = dict(
         contrastive_lambda_ori=0.1,
         ori_pos_k=1,
         warm_epoch=0,
-        memory_k=12613,
+        memory_k=65536,
         pos_k=1,
-        T=0.1,
+        T=0.2,
         ema=0.99,
         ctr_dim=128,
         bbox_head=dict(
@@ -33,6 +34,7 @@ model = dict(
     ),
     train_cfg=dict(
         label_type2weight=[1,2,2],
+        ema=0.999,
         rcnn=dict(
             sampler=dict(
                 num=256,
@@ -41,7 +43,7 @@ model = dict(
     ),
 )
 # optimizer
-optimizer = dict(type='SGD', lr=0.005, momentum=0.9, weight_decay=0.0001)
+optimizer = dict(type='SGD', lr=0.01, momentum=0.9, weight_decay=0.0001)
 custom_hooks = [dict(type='NumClassCheckHook'), dict(type='MEMEMAHook')]
 optimizer_config = dict(grad_clip=None)
 # learning policy

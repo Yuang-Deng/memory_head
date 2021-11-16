@@ -275,8 +275,10 @@ class MOCOTransform:
         img = self.random_gray_scale(img)
         img = self.random_gaussian_blur(img)
         img = np.asarray(img)
+
         # iimage = torch.from_numpy(img.transpose([2, 0, 1]))
         # iimage = transforms.ToPILImage()(iimage).convert('RGB')
-        # iimage.show()
+        # iimage.save('./work_dirs/img_out/test.jpg')
+
         results['img'] = img
         return results
