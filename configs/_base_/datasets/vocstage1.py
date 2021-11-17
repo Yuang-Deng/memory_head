@@ -72,7 +72,7 @@ mem_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(type='LoadAnnotations', with_bbox=True),
     dict(type='MOCOTransform'),
-    dict(type='Resize', img_scale=[(1000, 400), (1000, 800)], keep_ratio=True),
+    dict(type='Resize', img_scale=[(1000, 200), (1000, 900)], keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=32),

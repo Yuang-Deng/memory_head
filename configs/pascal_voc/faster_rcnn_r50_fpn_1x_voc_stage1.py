@@ -5,7 +5,7 @@ _base_ = [
 ]
 data_root = '/home/qiucm/workspace/dataset/VOCdevkit/'
 data = dict(
-    samples_per_gpu=4,
+    samples_per_gpu=2,
     workers_per_gpu=2,
 )
 model = dict(
@@ -23,7 +23,7 @@ model = dict(
         warm_epoch=0,
         memory_k=65536,
         pos_k=1,
-        T=0.2,
+        T=0.5,
         ema=0.99,
         ctr_dim=128,
         bbox_head=dict(
@@ -43,7 +43,7 @@ model = dict(
     ),
 )
 # optimizer
-optimizer = dict(type='SGD', lr=0.01, momentum=0.9, weight_decay=0.0001)
+optimizer = dict(type='SGD', lr=0.005, momentum=0.9, weight_decay=0.0001)
 custom_hooks = [dict(type='NumClassCheckHook'), dict(type='MEMEMAHook')]
 optimizer_config = dict(grad_clip=None)
 # learning policy
