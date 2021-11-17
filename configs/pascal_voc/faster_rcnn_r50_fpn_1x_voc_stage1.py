@@ -3,10 +3,10 @@ _base_ = [
     '../_base_/schedules/schedule_1x.py',
     '../_base_/default_runtime.py',
 ]
-data_root = '/home/qiucm/workspace/dataset/VOCdevkit/'
+data_root = 'D:/dataset/voc/VOCdevkit/'
 data = dict(
-    samples_per_gpu=2,
-    workers_per_gpu=2,
+    samples_per_gpu=8,
+    workers_per_gpu=0,
 )
 model = dict(
     type='EMAFasterRCNN',
@@ -17,13 +17,13 @@ model = dict(
     ),
     roi_head=dict(
         type='MMStandardRoIHead',
-        contrastive_lambda=0.1,
-        contrastive_lambda_ori=0.1,
+        contrastive_lambda=0.2,
+        contrastive_lambda_ori=0.2,
         ori_pos_k=1,
         warm_epoch=0,
         memory_k=65536,
         pos_k=1,
-        T=0.5,
+        T=0.2,
         ema=0.99,
         ctr_dim=128,
         bbox_head=dict(

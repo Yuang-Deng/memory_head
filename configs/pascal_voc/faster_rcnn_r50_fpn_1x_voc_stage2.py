@@ -5,30 +5,46 @@ _base_ = [
 ]
 data_root = '/home/qiucm/workspace/dataset/VOCdevkit/'
 data = dict(
-    samples_per_gpu=2,
-    workers_per_gpu=2,
+    samples_per_gpu=8,
+    workers_per_gpu=0,
 )
 model = dict(
+    type='EMAFasterRCNN',
+    rpn_head=dict(
+        anchor_generator=dict(
+            scales=[8,16,32]
+        )
+    ),
     roi_head=dict(
         type='MMStandardRoIHead',
-        contrastive_lambda=0.1,
+        contrastive_lambda=0.2,
+        contrastive_lambda_ori=0.2,
+        ori_pos_k=1,
         warm_epoch=0,
-        memory_k=16384,
-        T=0.7,
+        memory_k=65536,
+        pos_k=1,
+        T=0.2,
         ema=0.99,
+        ctr_dim=128,
         bbox_head=dict(
             type='MMShared2FCBBoxHead',
             num_classes=20,
             loss_mid_weight=0,
-            loss_mem_cls_weight=1,
-            loss_mem_box_weight=1,
-            loss_sim_weight=1,
+            loss_mem_cls_weight=0,
+            loss_mem_box_weight=0,
+            loss_sim_weight=0,
             sim_target=0,
         ),
     ),
     train_cfg=dict(
         label_type2weight=[1,2,2],
-        train_mod='ssod'
+        train_mod='ssod',
+        ema=0.999,
+        rcnn=dict(
+            sampler=dict(
+                num=256,
+            )
+        )
     ),
 )
 # optimizer
