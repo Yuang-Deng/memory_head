@@ -85,6 +85,8 @@ class BaseSampler(metaclass=ABCMeta):
             assign_result, num_expected_pos, bboxes=bboxes, **kwargs)
         # We found that sampled indices have duplicated items occasionally.
         # (may be a bug of PyTorch)
+        if self.add_gt_as_proposals and len(gt_bboxes) > 0:
+            pos_inds = torch.cat([torch.arange(0, gt_bboxes.size(0)).to(pos_inds.device), pos_inds[gt_bboxes.size(0):]])
         pos_inds = pos_inds.unique()
         num_sampled_pos = pos_inds.numel()
         num_expected_neg = self.num - num_sampled_pos
