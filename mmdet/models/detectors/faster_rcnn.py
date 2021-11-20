@@ -1,5 +1,6 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 from ..builder import DETECTORS, build_backbone, build_head, build_neck
+from mmdet.core import build_assigner, build_sampler
 from .two_stage import TwoStageDetector
 
 
@@ -70,6 +71,9 @@ class EMAFasterRCNN(TwoStageDetector):
             roi_head.update(test_cfg=test_cfg.rcnn)
             roi_head.pretrained = pretrained
             self.ema_roi_head = build_head(roi_head)
+
+        self.ema_rpn_head.assigner = build_assigner(train_cfg.ctr_rpn_assigner)
+        # self.ema_rpn_head.sampler = build_sampler(train_cfg.ctr_rpn.sampler)
         
         self._init_and_freeze('ema_backbone', 'backbone')
         self._init_and_freeze('ema_neck', 'neck')

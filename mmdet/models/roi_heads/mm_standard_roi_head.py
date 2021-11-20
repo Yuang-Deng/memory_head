@@ -310,21 +310,21 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
         pos_labels_ctr = torch.zeros([0]).to(device).long()
         for i, (res_anchor, res_ctr) in enumerate(zip(sampling_results_anchor, sampling_results_ctr)):
             pos_inds_anchor = torch.cat([pos_inds_anchor, (torch.arange(0, res_anchor.pos_inds.size(0)).to(device).long() + (i * batch)).view(-1)])
-            gt_range_anchor = torch.nonzero(res_anchor.pos_is_gt).size(0)
-            gt_range_ctr = torch.nonzero(res_ctr.pos_is_gt).size(0)
-            pos_gt_map_anchor = torch.cat([pos_gt_map_anchor, (res_anchor.pos_assigned_gt_inds + (i * batch)).view(-1)[:gt_range_anchor]])
-            pos_gt_map_ctr = torch.cat([pos_gt_map_ctr, (res_ctr.pos_assigned_gt_inds + (i * batch)).view(-1)[:gt_range_ctr]])
-            pos_labels_anchor = torch.cat([pos_labels_anchor, res_anchor.pos_gt_labels[:gt_range_anchor]])
-            pos_labels_ctr = torch.cat([pos_labels_ctr, res_ctr.pos_gt_labels[:gt_range_ctr]])
+            # gt_range_anchor = torch.nonzero(res_anchor.pos_is_gt).size(0)
+            # gt_range_ctr = torch.nonzero(res_ctr.pos_is_gt).size(0)
+            pos_gt_map_anchor = torch.cat([pos_gt_map_anchor, (res_anchor.pos_assigned_gt_inds + (i * batch)).view(-1)])
+            pos_gt_map_ctr = torch.cat([pos_gt_map_ctr, (res_ctr.pos_assigned_gt_inds + (i * batch)).view(-1)])
+            pos_labels_anchor = torch.cat([pos_labels_anchor, res_anchor.pos_gt_labels])
+            pos_labels_ctr = torch.cat([pos_labels_ctr, res_ctr.pos_gt_labels])
 
         # 需要弱增强的proposal，强增强的proposal，强增强的gt
-        rois_anchor = bbox2roi([res.pos_bboxes[:torch.nonzero(res.pos_is_gt).size(0)] for res in sampling_results_anchor])
+        rois_anchor = bbox2roi([res.pos_bboxes for res in sampling_results_anchor])
         bbox_feats_anchor = self.bbox_roi_extractor(
             x_saug_anchor[:self.bbox_roi_extractor.num_inputs], rois_anchor)
         bbox_feats_anchor = self.fwd_fc(bbox_feats_anchor.view(bbox_feats_anchor.size(0), -1))
         bbox_feats_anchor = F.normalize(bbox_feats_anchor, dim=1)
 
-        rois_ctr = bbox2roi([res.pos_bboxes[:torch.nonzero(res.pos_is_gt).size(0)] for res in sampling_results_ctr])
+        rois_ctr = bbox2roi([res.pos_bboxes for res in sampling_results_ctr])
         bbox_feats_rois_ctr = ema_roi_head.bbox_roi_extractor(
             x_saug_ctr[:ema_roi_head.bbox_roi_extractor.num_inputs], rois_ctr)
         # bbox_feats_rois_ctr = self.mem_fc(bbox_feats_rois_ctr.view(bbox_feats_rois_ctr.size(0), -1))
@@ -379,7 +379,7 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
         
         re_ori_logits = []
         for i in range(self.ori_pos_k):
-            pos_logits = torch.einsum('nc,nc->n', [bbox_feats_anchor, bbox_feats_gt_ctr])
+            pos_logits = torch.einsum('nc,nc->n', [bbox_feats_anchor, all_ori_pos_logit_pseudo[i]])
             logits = torch.cat([pos_logits[:, None], neg_logits], dim=1)
             logits /= self.T
             re_ori_logits.append(logits)

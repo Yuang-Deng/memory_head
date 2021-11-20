@@ -6,7 +6,7 @@ _base_ = [
 data_root = 'D:/dataset/voc/VOCdevkit/'
 data = dict(
     samples_per_gpu=8,
-    workers_per_gpu=8,
+    workers_per_gpu=0,
 )
 model = dict(
     type='EMAFasterRCNN',
@@ -17,13 +17,13 @@ model = dict(
     ),
     roi_head=dict(
         type='MMStandardRoIHead',
-        contrastive_lambda=0,
+        contrastive_lambda=0.2,
         contrastive_lambda_ori=0.2,
         ori_pos_k=1,
         warm_epoch=0,
         memory_k=65536,
         pos_k=1,
-        T=0.2,
+        T=0.5,
         ema=0.99,
         ctr_dim=128,
         bbox_head=dict(
@@ -39,7 +39,14 @@ model = dict(
             sampler=dict(
                 num=256,
             )
-        )
+        ),
+        ctr_rpn_assigner=dict(
+            type='MaxIoUAssigner',
+            pos_iou_thr=0.7,
+            neg_iou_thr=0.3,
+            min_pos_iou=0.7,
+            match_low_quality=True,
+            ignore_iof_thr=-1),
     ),
 )
 # optimizer

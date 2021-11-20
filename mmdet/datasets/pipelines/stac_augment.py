@@ -208,7 +208,7 @@ class STACTransform:
             return image_aug[0], bb_aug[0]
 
     def __call__(self, results):
-        img = results['img']
+        img = results['img'].copy()
         bboxes = results['ann_info']['bboxes']
         # label_type = results['label_type']
         if 1 == results['label_type']:
