@@ -24,7 +24,7 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
 
         self.register_buffer("queue_vector", torch.randn(self.memory_k, self.dim)) 
         self.queue_vector = F.normalize(self.queue_vector, dim=1)
-        self.register_buffer("queue_label", torch.ones(self.memory_k).long() * 0)
+        self.register_buffer("queue_label", torch.ones(self.memory_k).long() * 300)
         self.register_buffer("queue_boxes", torch.ones(self.memory_k, 4).long())
 
         self.register_buffer("queue_ptr", torch.zeros(1, dtype=torch.long))
@@ -359,8 +359,19 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
                 pos_logit = pos_logits[rand_index, :]
                 all_ori_pos_logit_pseudo[j] = torch.cat([all_ori_pos_logit_pseudo[j], pos_logit], dim=0)
 
-            pos_inds = pos_labels_ctr == pos_labels_anchor[i]
-            pos_logits = bbox_feats_rois_ctr[pos_inds, :]
+            # TODO 原ctr2
+            # pos_inds = pos_labels_ctr == pos_labels_anchor[i]
+            # pos_logits = bbox_feats_rois_ctr[pos_inds, :]
+            # if pos_logits.size(0) == 0:
+            #     pos_inds = labels_gt_ctr == pos_labels_anchor[i]
+            #     pos_logits = bbox_feats_gt_ctr[pos_inds, :]
+            # for j in range(self.pos_k):
+            #     rand_index = torch.randint(low=0, high=pos_logits.size(0), size=(1,))
+            #     pos_logit = pos_logits[rand_index, :]
+            #     all_pos_logit_pseudo[j] = torch.cat([all_pos_logit_pseudo[j], pos_logit], dim=0)
+
+            pos_inds = self.queue_label == pos_labels_anchor[i]
+            pos_logits = self.queue_vector[pos_inds, :]
             if pos_logits.size(0) == 0:
                 pos_inds = labels_gt_ctr == pos_labels_anchor[i]
                 pos_logits = bbox_feats_gt_ctr[pos_inds, :]
@@ -368,6 +379,8 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
                 rand_index = torch.randint(low=0, high=pos_logits.size(0), size=(1,))
                 pos_logit = pos_logits[rand_index, :]
                 all_pos_logit_pseudo[j] = torch.cat([all_pos_logit_pseudo[j], pos_logit], dim=0)
+
+
 
         re_logits = []
         neg_logits = torch.einsum('nc,kc->nk', [bbox_feats_anchor, self.queue_vector.clone().detach()])

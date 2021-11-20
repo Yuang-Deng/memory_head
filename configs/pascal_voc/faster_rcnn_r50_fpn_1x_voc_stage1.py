@@ -5,7 +5,7 @@ _base_ = [
 ]
 data_root = 'D:/dataset/voc/VOCdevkit/'
 data = dict(
-    samples_per_gpu=8,
+    samples_per_gpu=2,
     workers_per_gpu=0,
 )
 model = dict(
