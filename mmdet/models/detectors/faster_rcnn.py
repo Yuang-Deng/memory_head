@@ -1,8 +1,7 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 from ..builder import DETECTORS, build_backbone, build_head, build_neck
-from mmdet.core import build_assigner, build_sampler
+from mmdet.core import build_assigner, build_sampler, bbox2roi
 from .two_stage import TwoStageDetector
-
 
 @DETECTORS.register_module()
 class FasterRCNN(TwoStageDetector):
@@ -109,3 +108,10 @@ class EMAFasterRCNN(TwoStageDetector):
 
         for param_q, param_k in zip(self.ema_roi_head.parameters(), self.roi_head.parameters()):
             param_q.data = param_q.data * self.ema + param_k.data * (1. - self.ema)
+
+    def ema_forward(self, img, boxes):
+        x = self.extract_feat_ema(img[None,:,:,:])
+        rois = bbox2roi([boxes])
+        bbox_feats = self.ema_roi_head.bbox_roi_extractor(
+            x[:self.ema_roi_head.bbox_roi_extractor.num_inputs], rois)
+        return bbox_feats

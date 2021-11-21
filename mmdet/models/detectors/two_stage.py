@@ -213,6 +213,8 @@ class TwoStageDetector(BaseDetector):
                 kwargs['aug_proposal_list2'] = aug_proposal_list
 
             kwargs['ema_roi_head'] = self.ema_roi_head
+        
+        kwargs['ema_forward'] = self.ema_forward
 
         roi_losses = self.roi_head.forward_train(x, img_metas, proposal_list,
                                                  gt_bboxes, gt_labels,

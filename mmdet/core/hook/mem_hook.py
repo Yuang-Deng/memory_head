@@ -125,6 +125,9 @@ class MEMEMAHook(Hook):
                 # in case the data loader uses `SequentialSampler` in Pytorch
                 runner.model.module.roi_head.mem_weight_init()
 
+    def before_train_epoch(self, runner):
+        runner.model.module.roi_head.dataset = runner.data_loader.dataset
+
     def after_train_iter(self, runner):
         if hasattr(runner.model.module.roi_head, 'mem_weight_update'):
                 # in case the data loader uses `SequentialSampler` in Pytorch

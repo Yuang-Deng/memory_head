@@ -31,9 +31,9 @@ class XMLDataset(CustomDataset):
             'classes', None), 'CLASSES in `XMLDataset` can not be None.'
         self.img_subdir = img_subdir
         self.ann_subdir = ann_subdir
-        super(XMLDataset, self).__init__(**kwargs)
         self.cat2label = {cat: i for i, cat in enumerate(self.CLASSES)}
         self.min_size = min_size
+        super(XMLDataset, self).__init__(**kwargs)
 
     def load_annotations(self, ann_file):
         """Load annotation from XML style ann_file.

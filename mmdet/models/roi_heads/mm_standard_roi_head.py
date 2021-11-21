@@ -290,9 +290,17 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
             bbox_feats=bbox_feats)
         return bbox_results
     
-    def _contrast_bbox_forwardV2(self, x, rois, x_saug_anchor, x_saug_ctr, bboxes_ctr, 
-                                labels_ctr, sampling_results_ctr, sampling_results_anchor, ema_roi_head):
+    def _contrast_bbox_forwardV2(self, x, rois, **kwargs):
         """Box head forward function used in both training and testing."""
+
+        x_saug_anchor = kwargs['x_saug1']
+        x_saug_ctr = kwargs['x_saug2']
+        bboxes_ctr = kwargs['aug_gt_bboxes2']
+        labels_ctr = kwargs['aug_gt_labels2']
+        sampling_results_ctr = kwargs['sampling_results_ctr']
+        sampling_results_anchor = kwargs['sampling_results_anchor']
+        ema_roi_head = kwargs['ema_roi_head']
+
         # TODO: a more flexible way to decide which feature maps to use
         bbox_feats = self.bbox_roi_extractor(
             x[:self.bbox_roi_extractor.num_inputs], rois)
@@ -370,19 +378,23 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
             #     pos_logit = pos_logits[rand_index, :]
             #     all_pos_logit_pseudo[j] = torch.cat([all_pos_logit_pseudo[j], pos_logit], dim=0)
 
-            pos_inds = self.queue_label == pos_labels_anchor[i]
-            pos_logits = self.queue_vector[pos_inds, :]
-            if pos_logits.size(0) == 0:
-                pos_inds = labels_gt_ctr == pos_labels_anchor[i]
-                pos_logits = bbox_feats_gt_ctr[pos_inds, :]
+            # pos_inds = self.queue_label == pos_labels_anchor[i]
+            # pos_logits = self.queue_vector[pos_inds, :]
+            same_label_item = self.dataset.datasets[0].get_same_label_item(pos_labels_anchor[i])
+            feats = kwargs['ema_forward'](same_label_item['img'].data.to(device), same_label_item['gt_bboxes'].data[same_label_item['gt_labels'].data.to(device) == pos_labels_anchor[i]].to(device))
+            feats = feats.view(feats.size(0), -1)
+            feats = self.mem_fc(feats)
             for j in range(self.pos_k):
-                rand_index = torch.randint(low=0, high=pos_logits.size(0), size=(1,))
-                pos_logit = pos_logits[rand_index, :]
+                rand_index = torch.randint(low=0, high=feats.size(0), size=(1,))
+                pos_logit = feats[rand_index, :]
                 all_pos_logit_pseudo[j] = torch.cat([all_pos_logit_pseudo[j], pos_logit], dim=0)
+
+            # 直接找图片的ctr2
 
 
 
         re_logits = []
+        neg_inds = self.queue_label != 300
         neg_logits = torch.einsum('nc,kc->nk', [bbox_feats_anchor, self.queue_vector.clone().detach()])
         for i in range(self.pos_k):
             pos_logits = torch.einsum('nc,nc->n', [bbox_feats_anchor, all_pos_logit_pseudo[i]])
@@ -419,11 +431,7 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
         bbox_targets = self.bbox_head.get_targets(sampling_results, gt_bboxes,
                                                   gt_labels, self.train_cfg)
 
-        bbox_results = self._contrast_bbox_forwardV2(x, rois, kwargs['x_saug1'], kwargs['x_saug2'], 
-                                                    kwargs['aug_gt_bboxes2'], 
-                                                    kwargs['aug_gt_labels2'], 
-                                                    kwargs['sampling_results_ctr'],
-                                                    kwargs['sampling_results_anchor'], kwargs['ema_roi_head'])
+        bbox_results = self._contrast_bbox_forwardV2(x, rois, **kwargs)
 
         split_list = [sr.bboxes.size(0) for sr in sampling_results]
         

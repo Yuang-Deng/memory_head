@@ -7,6 +7,7 @@ import mmcv
 import numpy as np
 from mmcv.utils import print_log
 from terminaltables import AsciiTable
+from torch._C import parse_schema
 from torch.utils.data import Dataset
 
 from mmdet.core import eval_map, eval_recalls
@@ -78,6 +79,9 @@ class CustomDataset(Dataset):
         self.CLASSES = self.get_classes(classes)
         self.sample_persent = sample_persent
         self.label_type = label_type
+        self.box_img_map = {}
+        for i in range(len(self.CLASSES)):
+            self.box_img_map[i] = []
 
         # join paths if data_root is specified
         if self.data_root is not None:
@@ -113,6 +117,11 @@ class CustomDataset(Dataset):
         self.w_s_aug = w_s_aug
         if w_s_aug:
             self.pipelines = Compose(pipelines)
+
+        for i in range(len(self.data_infos)):
+            ann = self.get_ann_info(i)
+            for label in np.unique(ann['labels']):
+                self.box_img_map[label].append(i)
 
     def __len__(self):
         """Total number of samples of data."""
@@ -150,12 +159,13 @@ class CustomDataset(Dataset):
 
         return self.data_infos[idx]['ann']['labels'].astype(np.int).tolist()
 
-    def pre_pipeline(self, results):
+    def pre_pipeline(self, results, idx=0):
         """Prepare results dict for pipeline."""
         results['img_prefix'] = self.img_prefix
         results['seg_prefix'] = self.seg_prefix
         results['proposal_file'] = self.proposal_file
         results['label_type'] = self.label_type
+        results['idx'] = idx
         results['bbox_fields'] = []
         results['mask_fields'] = []
         results['seg_fields'] = []
@@ -232,24 +242,34 @@ class CustomDataset(Dataset):
         results = dict(img_info=img_info, ann_info=ann_info)
         if self.proposals is not None:
             results['proposals'] = self.proposals[idx]
-        self.pre_pipeline(results)
+        self.pre_pipeline(results, idx)
         if self.w_s_aug:
             img_info = self.data_infos[idx]
             ann_info = self.get_ann_info(idx)
             resultss1 = dict(img_info=img_info, ann_info=ann_info)
             if self.proposals is not None:
                 resultss1['proposals'] = self.proposals[idx]
-            self.pre_pipeline(resultss1)
-            
+            self.pre_pipeline(resultss1, idx)
             img_info = self.data_infos[idx]
             ann_info = self.get_ann_info(idx)
             resultss2 = dict(img_info=img_info, ann_info=ann_info)
             if self.proposals is not None:
                 resultss2['proposals'] = self.proposals[idx]
-            self.pre_pipeline(resultss2)
+            self.pre_pipeline(resultss2, idx)
             return [self.pipeline(results), self.pipelines(resultss1), self.pipelines(resultss2)]
         else:
             return self.pipeline(results)
+
+    def get_same_label_item(self, label):
+        idxs = self.box_img_map[label.item()]
+        idx = np.random.choice(idxs)
+        img_info = self.data_infos[idx]
+        ann_info = self.get_ann_info(idx)
+        results = dict(img_info=img_info, ann_info=ann_info)
+        if self.proposals is not None:
+            results['proposals'] = self.proposals[idx]
+        self.pre_pipeline(results, idx)
+        return self.pipelines(results)
 
     def prepare_test_img(self, idx):
         """Get testing data  after pipeline.
