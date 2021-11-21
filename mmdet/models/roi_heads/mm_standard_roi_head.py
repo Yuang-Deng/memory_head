@@ -412,6 +412,8 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
             logits = torch.cat([pos_logits[:, None], neg_logits], dim=1)
             logits /= self.T
             re_logits.append(logits)
+
+        labels = torch.zeros(logits.shape[0], dtype=torch.long).cuda()
         
         re_ori_logits = []
         neg_logits_ori = torch.einsum('nc,kc->nk', [bbox_feats_anchor, self.queue_vector.clone().detach()])
@@ -421,7 +423,7 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
             logits /= self.T
             re_ori_logits.append(logits)
 
-        labels = torch.zeros(logits.shape[0], dtype=torch.long).cuda()
+        ori_labels = torch.zeros(logits.shape[0], dtype=torch.long).cuda()
 
         self._dequeue_and_enqueue(bbox_feats_gt_ctr, labels_gt_ctr)
 
@@ -433,7 +435,8 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
             bbox_feats=bbox_feats,
             logits=re_logits,
             ori_logits=re_ori_logits,
-            labels=labels,)
+            labels=labels,
+            ori_labels=ori_labels,)
         return bbox_results
 
     def _unlabel_bbox_forward_train(self, x, sampling_results, gt_bboxes, gt_labels,
@@ -463,7 +466,7 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
 
         loss_contrastive_ori = []
         for i in range(self.ori_pos_k):
-            loss_contrastive_ori.append(F.cross_entropy(bbox_results['ori_logits'][i], bbox_results['labels']) * (1 / self.ori_pos_k))
+            loss_contrastive_ori.append(F.cross_entropy(bbox_results['ori_logits'][i], bbox_results['ori_labels']) * (1 / self.ori_pos_k))
         loss_contrastive_ori = sum(loss_contrastive_ori) * self.contrastive_lambda_ori
 
 
