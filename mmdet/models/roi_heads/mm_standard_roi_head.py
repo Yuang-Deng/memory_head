@@ -325,6 +325,14 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
             pos_labels_anchor = torch.cat([pos_labels_anchor, res_anchor.pos_gt_labels])
             pos_labels_ctr = torch.cat([pos_labels_ctr, res_ctr.pos_gt_labels])
 
+        # 新的ctr需要弱增强的gt
+        gt_rois_anchor = bbox2roi([res for res in kwargs['aug_gt_bboxes1']])
+        gt_labels_anchor = torch.cat(kwargs['aug_gt_labels1'])
+        gt_bbox_feats_anchor = self.bbox_roi_extractor(
+            x_saug_anchor[:self.bbox_roi_extractor.num_inputs], gt_rois_anchor)
+        gt_bbox_feats_anchor = self.fwd_fc(gt_bbox_feats_anchor.view(gt_bbox_feats_anchor.size(0), -1))
+        gt_bbox_feats_anchor = F.normalize(gt_bbox_feats_anchor, dim=1)
+
         # 需要弱增强的proposal，强增强的proposal，强增强的gt
         rois_anchor = bbox2roi([res.pos_bboxes for res in sampling_results_anchor])
         bbox_feats_anchor = self.bbox_roi_extractor(
@@ -380,8 +388,15 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
 
             # pos_inds = self.queue_label == pos_labels_anchor[i]
             # pos_logits = self.queue_vector[pos_inds, :]
-            same_label_item = self.dataset.datasets[0].get_same_label_item(pos_labels_anchor[i])
-            feats = kwargs['ema_forward'](same_label_item['img'].data.to(device), same_label_item['gt_bboxes'].data[same_label_item['gt_labels'].data.to(device) == pos_labels_anchor[i]].to(device))
+            # for j in range(self.pos_k):
+            #     rand_index = torch.randint(low=0, high=pos_logits.size(0), size=(1,))
+            #     pos_logit = pos_logits[rand_index, :]
+            #     all_pos_logit_pseudo[j] = torch.cat([all_pos_logit_pseudo[j], pos_logit], dim=0)
+
+        # 直接找图片的ctr2
+        for i in range(gt_labels_anchor.size(0)):
+            same_label_item = self.dataset.datasets[0].get_same_label_item(gt_labels_anchor[i])
+            feats = kwargs['ema_forward'](same_label_item['img'].data.to(device), same_label_item['gt_bboxes'].data[same_label_item['gt_labels'].data.to(device) == gt_labels_anchor[i]].to(device))
             feats = feats.view(feats.size(0), -1)
             feats = self.mem_fc(feats)
             for j in range(self.pos_k):
@@ -389,23 +404,20 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
                 pos_logit = feats[rand_index, :]
                 all_pos_logit_pseudo[j] = torch.cat([all_pos_logit_pseudo[j], pos_logit], dim=0)
 
-            # 直接找图片的ctr2
-
-
 
         re_logits = []
-        neg_inds = self.queue_label != 300
-        neg_logits = torch.einsum('nc,kc->nk', [bbox_feats_anchor, self.queue_vector.clone().detach()])
+        neg_logits = torch.einsum('nc,kc->nk', [gt_bbox_feats_anchor, self.queue_vector.clone().detach()])
         for i in range(self.pos_k):
-            pos_logits = torch.einsum('nc,nc->n', [bbox_feats_anchor, all_pos_logit_pseudo[i]])
+            pos_logits = torch.einsum('nc,nc->n', [gt_bbox_feats_anchor, all_pos_logit_pseudo[i]])
             logits = torch.cat([pos_logits[:, None], neg_logits], dim=1)
             logits /= self.T
             re_logits.append(logits)
         
         re_ori_logits = []
+        neg_logits_ori = torch.einsum('nc,kc->nk', [bbox_feats_anchor, self.queue_vector.clone().detach()])
         for i in range(self.ori_pos_k):
             pos_logits = torch.einsum('nc,nc->n', [bbox_feats_anchor, all_ori_pos_logit_pseudo[i]])
-            logits = torch.cat([pos_logits[:, None], neg_logits], dim=1)
+            logits = torch.cat([pos_logits[:, None], neg_logits_ori], dim=1)
             logits /= self.T
             re_ori_logits.append(logits)
 
