@@ -399,6 +399,7 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
             feats = kwargs['ema_forward'](same_label_item['img'].data.to(device), same_label_item['gt_bboxes'].data[same_label_item['gt_labels'].data.to(device) == gt_labels_anchor[i]].to(device))
             feats = feats.view(feats.size(0), -1)
             feats = self.mem_fc(feats)
+            feats = F.normalize(feats, dim=1)
             for j in range(self.pos_k):
                 rand_index = torch.randint(low=0, high=feats.size(0), size=(1,))
                 pos_logit = feats[rand_index, :]
@@ -410,7 +411,7 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
         for i in range(self.pos_k):
             pos_logits = torch.einsum('nc,nc->n', [gt_bbox_feats_anchor, all_pos_logit_pseudo[i]])
             logits = torch.cat([pos_logits[:, None], neg_logits], dim=1)
-            logits /= self.T
+            logits /= self.T2
             re_logits.append(logits)
 
         labels = torch.zeros(logits.shape[0], dtype=torch.long).cuda()
@@ -420,7 +421,7 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
         for i in range(self.ori_pos_k):
             pos_logits = torch.einsum('nc,nc->n', [bbox_feats_anchor, all_ori_pos_logit_pseudo[i]])
             logits = torch.cat([pos_logits[:, None], neg_logits_ori], dim=1)
-            logits /= self.T
+            logits /= self.T1
             re_ori_logits.append(logits)
 
         ori_labels = torch.zeros(logits.shape[0], dtype=torch.long).cuda()

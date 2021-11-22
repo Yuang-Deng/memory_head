@@ -233,7 +233,8 @@ class TwoStageDetector(BaseDetector):
                       gt_masks=None,
                       proposals=None,
                       **kwargs):
-        gt_tags = kwargs.pop('gt_tags')
+        if 'gt_tags' in kwargs.keys():
+            gt_tags = kwargs.pop('gt_tags')
         label_img, unlabel_img = img[:len(img) // 2], img[len(img) // 2:]
         label_img_metas, unlabel_img_metas = img_metas[:len(img_metas) // 2], img_metas[len(img_metas) // 2:]
         label_gt_bboxes, unlabel_gt_bboxes = gt_bboxes[:len(gt_bboxes) // 2], gt_bboxes[len(gt_bboxes) // 2:]
@@ -271,6 +272,7 @@ class TwoStageDetector(BaseDetector):
 
         if 'saug1' in kwargs.keys():
             kwargs['ema_roi_head'] = self.ema_roi_head
+            kwargs['ema_forward'] = self.ema_forward
             x_saug_labeled = self.extract_feat(kwargs['saug1']['img'][:len(img) // 2])
             kwargs['x_saug1'] = x_saug_labeled
             kwargs['aug_gt_bboxes1'] = kwargs['saug1']['gt_bboxes'][:len(img) // 2]
