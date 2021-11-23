@@ -6,7 +6,7 @@ _base_ = [
 data_root = 'D:/dataset/voc/VOCdevkit/'
 data = dict(
     samples_per_gpu=2,
-    workers_per_gpu=8,
+    workers_per_gpu=0,
 )
 model = dict(
     type='EMAFasterRCNN',
@@ -17,13 +17,15 @@ model = dict(
     ),
     roi_head=dict(
         type='MMStandardRoIHead',
-        contrastive_lambda=1,
-        contrastive_lambda_ori=0.2,
+        contrastive_lambda2=0.2,
+        contrastive_lambda1=0.2,
+        unlabel_contrastive_lambda2=0.2,
         ori_pos_k=1,
         warm_epoch=0,
         memory_k=65536,
         pos_k=1,
-        T=0.5,
+        T1=0.2,
+        T2=0.2,
         ema=0.99,
         ctr_dim=128,
         bbox_head=dict(

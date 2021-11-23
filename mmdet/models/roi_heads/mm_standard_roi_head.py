@@ -463,12 +463,15 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
         loss_contrastive = []
         for i in range(self.pos_k):
             loss_contrastive.append(F.cross_entropy(bbox_results['logits'][i], bbox_results['labels']) * (1 / self.pos_k))
-        loss_contrastive = sum(loss_contrastive) * self.contrastive_lambda
+        if img_metas[0]['label_type'] == 0:
+            loss_contrastive = sum(loss_contrastive) * self.contrastive_lambda2
+        else:
+            loss_contrastive = sum(loss_contrastive) * self.unlabel_contrastive_lambda2
 
         loss_contrastive_ori = []
         for i in range(self.ori_pos_k):
             loss_contrastive_ori.append(F.cross_entropy(bbox_results['ori_logits'][i], bbox_results['ori_labels']) * (1 / self.ori_pos_k))
-        loss_contrastive_ori = sum(loss_contrastive_ori) * self.contrastive_lambda_ori
+        loss_contrastive_ori = sum(loss_contrastive_ori) * self.contrastive_lambda1
 
 
         loss_bbox['loss_ctr2'] = loss_contrastive
