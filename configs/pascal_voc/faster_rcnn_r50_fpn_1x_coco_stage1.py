@@ -1,5 +1,5 @@
 _base_ = [
-    '../_base_/models/faster_rcnn_r50_fpn.py', '../_base_/datasets/vocstage2.py',
+    '../_base_/models/faster_rcnn_r50_fpn.py', '../_base_/datasets/coco_stage1.py',
     '../_base_/schedules/schedule_1x.py',
     '../_base_/default_runtime.py',
 ]
@@ -27,22 +27,17 @@ model = dict(
         T1=0.2,
         T2=0.2,
         ema=0.99,
-        pseudo_gen_hook=False,
         ctr_dim=128,
         bbox_head=dict(
             type='MMShared2FCBBoxHead',
             num_classes=20,
             loss_mid_weight=0,
-            loss_mem_cls_weight=0,
-            loss_mem_box_weight=0,
-            loss_sim_weight=0,
-            sim_target=0,
-        ),
+        )
     ),
     train_cfg=dict(
         label_type2weight=[1,2,2],
-        train_mod='ssod',
         ema=0.999,
+        pseudo_gen_hook=True,
         rcnn=dict(
             sampler=dict(
                 num=256,
@@ -54,12 +49,11 @@ model = dict(
             neg_iou_thr=0.3,
             min_pos_iou=0.7,
             match_low_quality=True,
-            ignore_iof_thr=-1
-        ),
+            ignore_iof_thr=-1),
     ),
 )
 # optimizer
-optimizer = dict(type='SGD', lr=0.002, momentum=0.9, weight_decay=0.0001)
+optimizer = dict(type='SGD', lr=0.005, momentum=0.9, weight_decay=0.0001)
 custom_hooks = [dict(type='NumClassCheckHook'), dict(type='MEMEMAHook')]
 optimizer_config = dict(grad_clip=None)
 # learning policy

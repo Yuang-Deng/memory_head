@@ -298,25 +298,21 @@ class MMBBoxHead(BaseModule):
              reduction_override=None,
              **kwargs):
         losses = dict()
-        # split_list = [num_per_img] * (cls_score.size(0) // num_per_img)
-        bg_class_ind = self.num_classes
-        # 0~self.num_classes-1 are FG, self.num_classes is BG
-        pos_inds = (labels >= 0) & (labels < bg_class_ind)
-        # mid_cls_score = mid_cls_score[pos_inds]
-        # mid_det_score = mid_det_score[pos_inds]
 
-        det_logit = [torch.softmax(sc[ind], dim=0) for sc, ind in zip(mid_det_score.split(split_list), pos_inds.split(split_list))]
-        split_list = [dl.size(0) for dl in det_logit]
-        det_logit = torch.cat(det_logit, dim=0)
-        cls_logit = torch.softmax(mid_cls_score[pos_inds], dim=-1)
-        img_label = self.generate_img_label(self.num_classes, gt_tags, labels.device)
-        mid_score = det_logit * cls_logit
-        tag_score = torch.cat([ms.sum(dim=0)[None, :] for ms in mid_score.split(split_list)], dim=0)
-        image_level_scores = torch.clamp(tag_score, min=1e-5, max=1.0 - 1e-5)
-        # image_level_scores = tag_score
-        # losses['loss_mid'] = (F.binary_cross_entropy(image_level_scores, img_label, reduction="sum") / img_label.size(0)) * self.loss_mid_weight
-        
-        losses['loss_mid'] = - ((img_label * torch.log(image_level_scores) + (1 - img_label) * torch.log(1 - image_level_scores)).sum() / img_label.size(0)) * self.loss_mid_weight
+
+        # bg_class_ind = self.num_classes
+        # pos_inds = (labels >= 0) & (labels < bg_class_ind)
+
+        # det_logit = [torch.softmax(sc[ind], dim=0) for sc, ind in zip(mid_det_score.split(split_list), pos_inds.split(split_list))]
+        # split_list = [dl.size(0) for dl in det_logit]
+        # det_logit = torch.cat(det_logit, dim=0)
+        # cls_logit = torch.softmax(mid_cls_score[pos_inds], dim=-1)
+        # img_label = self.generate_img_label(self.num_classes, gt_tags, labels.device)
+        # mid_score = det_logit * cls_logit
+        # tag_score = torch.cat([ms.sum(dim=0)[None, :] for ms in mid_score.split(split_list)], dim=0)
+        # image_level_scores = torch.clamp(tag_score, min=1e-5, max=1.0 - 1e-5)
+
+        # losses['loss_mid'] = - ((img_label * torch.log(image_level_scores) + (1 - img_label) * torch.log(1 - image_level_scores)).sum() / img_label.size(0)) * self.loss_mid_weight
         
         # losses['loss_mid'] = - ((one_hot_label * torch.log(mid_score)).sum() / cls_score.size(0)) * self.loss_mid_weight
         # print(losses['loss_mid'])

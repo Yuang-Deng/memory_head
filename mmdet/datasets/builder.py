@@ -34,6 +34,7 @@ def _concat_dataset(cfg, default_args=None):
     separate_eval = cfg.get('separate_eval', True)
     sample_percents = cfg.get('sample_persent', None)
     label_types = cfg.get('label_type', None)
+    dataset_type = cfg.get('type', None)
 
     datasets = []
     num_dset = len(ann_files)
@@ -43,6 +44,8 @@ def _concat_dataset(cfg, default_args=None):
         if 'separate_eval' in data_cfg:
             data_cfg.pop('separate_eval')
         data_cfg['ann_file'] = ann_files[i]
+        if isinstance(dataset_type, (list, tuple)):
+            data_cfg['type'] = dataset_type[i]
         if isinstance(img_prefixes, (list, tuple)):
             data_cfg['img_prefix'] = img_prefixes[i]
         if isinstance(seg_prefixes, (list, tuple)):

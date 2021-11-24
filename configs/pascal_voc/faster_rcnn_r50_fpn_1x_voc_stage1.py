@@ -3,7 +3,7 @@ _base_ = [
     '../_base_/schedules/schedule_1x.py',
     '../_base_/default_runtime.py',
 ]
-data_root = 'D:/dataset/voc/VOCdevkit/'
+data_root = '/data/dya/dataset/VOCdevkit/'
 data = dict(
     samples_per_gpu=2,
     workers_per_gpu=0,
@@ -27,6 +27,7 @@ model = dict(
         T1=0.2,
         T2=0.2,
         ema=0.99,
+        pseudo_gen_hook=False,
         ctr_dim=128,
         bbox_head=dict(
             type='MMShared2FCBBoxHead',

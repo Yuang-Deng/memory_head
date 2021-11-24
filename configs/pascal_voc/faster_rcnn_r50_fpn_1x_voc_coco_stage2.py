@@ -1,5 +1,5 @@
 _base_ = [
-    '../_base_/models/faster_rcnn_r50_fpn.py', '../_base_/datasets/vocstage2.py',
+    '../_base_/models/faster_rcnn_r50_fpn.py', '../_base_/datasets/voc_coco_stage2.py',
     '../_base_/schedules/schedule_1x.py',
     '../_base_/default_runtime.py',
 ]
@@ -27,7 +27,6 @@ model = dict(
         T1=0.2,
         T2=0.2,
         ema=0.99,
-        pseudo_gen_hook=False,
         ctr_dim=128,
         bbox_head=dict(
             type='MMShared2FCBBoxHead',
@@ -43,6 +42,7 @@ model = dict(
         label_type2weight=[1,2,2],
         train_mod='ssod',
         ema=0.999,
+        pseudo_gen_hook=False,
         rcnn=dict(
             sampler=dict(
                 num=256,

@@ -235,11 +235,13 @@ class TwoStageDetector(BaseDetector):
                       **kwargs):
         if 'gt_tags' in kwargs.keys():
             gt_tags = kwargs.pop('gt_tags')
+            label_gt_tags, unlabel_gt_tags = gt_tags[:len(gt_tags) // 2], gt_tags[len(gt_tags) // 2:]
+        else:
+            label_gt_tags, unlabel_gt_tags = None, None
         label_img, unlabel_img = img[:len(img) // 2], img[len(img) // 2:]
         label_img_metas, unlabel_img_metas = img_metas[:len(img_metas) // 2], img_metas[len(img_metas) // 2:]
         label_gt_bboxes, unlabel_gt_bboxes = gt_bboxes[:len(gt_bboxes) // 2], gt_bboxes[len(gt_bboxes) // 2:]
         label_gt_labels, unlabel_gt_labels = gt_labels[:len(gt_labels) // 2], gt_labels[len(gt_labels) // 2:]
-        label_gt_tags, unlabel_gt_tags = gt_tags[:len(gt_tags) // 2], gt_tags[len(gt_tags) // 2:]
         label_type2weight = self.train_cfg.label_type2weight
 
         losses = dict()

@@ -10,7 +10,7 @@ from mmcv.runner import (HOOKS, DistSamplerSeedHook, EpochBasedRunner,
                          build_runner)
 from mmcv.utils import build_from_cfg
 
-from mmdet.core import DistEvalHook, EvalHook, DistMEMHook, MEMHook
+from mmdet.core import DistEvalHook, EvalHook, DistMEMHook, MEMHook, DistPseudoHook, PseudoHook
 from mmdet.datasets import (build_dataloader, build_dataset,
                             replace_ImageToTensor)
 from mmdet.utils import get_root_logger
@@ -179,6 +179,25 @@ def train_detector(model,
     #     mem_hook = DistMEMHook if distributed else MEMHook
     #     runner.register_hook(
     #         mem_hook(mem_dataloader, start=cfg.model.roi_head.warm_epoch, interval=1), priority='LOW')
+
+
+    if cfg.model.train_cfg.pseudo_gen_hook:
+        val_samples_per_gpu = cfg.data.coco_test.pop('samples_per_gpu', 1)
+        if val_samples_per_gpu > 1:
+            # Replace 'ImageToTensor' to 'DefaultFormatBundle'
+            cfg.data.coco_test.pipeline = replace_ImageToTensor(
+                cfg.data.coco_test.pipeline)
+        pseudo_dataset = build_dataset(cfg.data.coco_test, dict(test_mode=True))
+        pseudo_dataloader = build_dataloader(
+            pseudo_dataset,
+            samples_per_gpu=val_samples_per_gpu,
+            workers_per_gpu=cfg.data.workers_per_gpu,
+            dist=distributed,
+            shuffle=False)
+
+        pseudo_hook = DistPseudoHook if distributed else PseudoHook
+        runner.register_hook(
+            pseudo_hook(pseudo_dataloader, start=11, interval=1, metric=eval_cfg['metric']), priority='LOW')
 
     # user-defined hooks
     if cfg.get('custom_hooks', None):

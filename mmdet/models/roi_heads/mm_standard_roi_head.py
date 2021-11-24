@@ -130,7 +130,7 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
     def _dequeue_and_enqueue(self, features, labels, boxes=None):
         # gather keys before updating queue
         
-        # features, labels, boxes = self.concat_all_gather(features, labels, boxes)
+        features, labels, boxes = self.concat_all_gather(features, labels, boxes)
 
         batch_size = features.size(0)
 
@@ -648,7 +648,7 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
         ]
 
         if not self.with_mask:
-            return bbox_results
+            return bbox_results, det_bboxes, det_labels
         else:
             segm_results = self.simple_test_mask(
                 x, img_metas, det_bboxes, det_labels, rescale=rescale)

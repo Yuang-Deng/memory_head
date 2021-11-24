@@ -214,12 +214,7 @@ class STACTransform:
         if 1 == results['label_type']:
             augment_fn = self.strong_augment_fn
         else:
-            if self.mode == 'mem':
-                pass
-            elif self.mode == 'strong_aug':
-                augment_fn = self.strong_augment_fn
-            else:
-                augment_fn = self.default_augment_fn
+            augment_fn = self.default_augment_fn
         if len(augment_fn
                ) > 0 and augment_fn[-1][0].__name__ == 'cutout_augment':
             # put cutout in the last always
