@@ -15,7 +15,7 @@ import json
 'motorbike', 'person', 'pottedplant', 'sheep', 'sofa', 'train',
 'tvmonitor'}
 
-with open('/data/dya/dataset/coco/instances_unlabeledtrainval20class.json', 'r') as f:
+with open('/data/dya/dataset/coco/instances_unlabeledtrainval20class0.json', 'r') as f:
     label = json.load(f)
     id_c_map = {}
     for ci in label['categories']:
@@ -24,4 +24,3 @@ with open('/data/dya/dataset/coco/instances_unlabeledtrainval20class.json', 'r')
     for ann in label['annotations']:
         cat_set.add(id_c_map[ann['category_id']])
     print(cat_set)
-    cat2label = {cat_id: i for i, cat_id in enumerate(self.cat_ids)}

@@ -561,6 +561,11 @@ class CocoDataset(CustomDataset):
 @DATASETS.register_module()
 class VocCocoDataset(CocoDataset):
 
+    CLASSES = ('aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus', 'car',
+               'cat', 'chair', 'cow', 'diningtable', 'dog', 'horse',
+               'motorbike', 'person', 'pottedplant', 'sheep', 'sofa', 'train',
+               'tvmonitor')
+
     def load_annotations(self, ann_file):
         """Load annotation from COCO style annotation file.
 
@@ -571,30 +576,12 @@ class VocCocoDataset(CocoDataset):
             list[dict]: Annotation info from COCO api.
         """
 
-        voc_coco_cls = ['airplane', 'bicycle', 'bird', 'boat', 'bottle',
-        'bus', 'car', 'cat', 'chair', 'cow', 'dining table', 
-        'dog', 'horse', 'motorcycle', 'person', 'potted plant',
-        'sheep', 'couch', 'train', 'tv']
-
-        voc_cls = ['aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus', 'car',
-        'cat', 'chair', 'cow', 'diningtable', 'dog', 'horse',
-        'motorbike', 'person', 'pottedplant', 'sheep', 'sofa', 'train',
-        'tvmonitor']
-
         self.coco = COCO(ann_file)
         # The order of returned `cat_ids` will not
         # change with the order of the CLASSES
         self.cat_ids = self.coco.get_cat_ids(cat_names=self.CLASSES)
 
-        self.voc_c2l = {cat: i for i, cat in enumerate(voc_cls)}
-        self.voc_coco = {coco: voc for coco, voc in zip(voc_coco_cls, voc_cls)}
         self.cat2label = {cat_id: i for i, cat_id in enumerate(self.cat_ids)}
-
-
-        for k in self.cat2label.keys():
-            if self.CLASSES[self.cat2label[k]] in voc_coco_cls:
-                self.cat2label[k] = self.voc_c2l[self.voc_coco[self.CLASSES[self.cat2label[k]]]]
-
         self.img_ids = self.coco.get_img_ids()
         data_infos = []
         total_ann_ids = []
@@ -607,3 +594,50 @@ class VocCocoDataset(CocoDataset):
         assert len(set(total_ann_ids)) == len(
             total_ann_ids), f"Annotation ids in '{ann_file}' are not unique!"
         return data_infos
+
+    # def load_annotations(self, ann_file):
+    #     """Load annotation from COCO style annotation file.
+
+    #     Args:
+    #         ann_file (str): Path of annotation file.
+
+    #     Returns:
+    #         list[dict]: Annotation info from COCO api.
+    #     """
+
+    #     voc_coco_cls = ['airplane', 'bicycle', 'bird', 'boat', 'bottle',
+    #     'bus', 'car', 'cat', 'chair', 'cow', 'dining table', 
+    #     'dog', 'horse', 'motorcycle', 'person', 'potted plant',
+    #     'sheep', 'couch', 'train', 'tv']
+
+    #     voc_cls = ['aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus', 'car',
+    #     'cat', 'chair', 'cow', 'diningtable', 'dog', 'horse',
+    #     'motorbike', 'person', 'pottedplant', 'sheep', 'sofa', 'train',
+    #     'tvmonitor']
+
+    #     self.coco = COCO(ann_file)
+    #     # The order of returned `cat_ids` will not
+    #     # change with the order of the CLASSES
+    #     self.cat_ids = self.coco.get_cat_ids(cat_names=self.CLASSES)
+
+    #     self.voc_c2l = {cat: i for i, cat in enumerate(voc_cls)}
+    #     self.voc_coco = {coco: voc for coco, voc in zip(voc_coco_cls, voc_cls)}
+    #     self.cat2label = {cat_id: i for i, cat_id in enumerate(self.cat_ids)}
+
+
+    #     for k in self.cat2label.keys():
+    #         if self.CLASSES[self.cat2label[k]] in voc_coco_cls:
+    #             self.cat2label[k] = self.voc_c2l[self.voc_coco[self.CLASSES[self.cat2label[k]]]]
+
+    #     self.img_ids = self.coco.get_img_ids()
+    #     data_infos = []
+    #     total_ann_ids = []
+    #     for i in self.img_ids:
+    #         info = self.coco.load_imgs([i])[0]
+    #         info['filename'] = info['file_name']
+    #         data_infos.append(info)
+    #         ann_ids = self.coco.get_ann_ids(img_ids=[i])
+    #         total_ann_ids.extend(ann_ids)
+    #     assert len(set(total_ann_ids)) == len(
+    #         total_ann_ids), f"Annotation ids in '{ann_file}' are not unique!"
+    #     return data_infos
