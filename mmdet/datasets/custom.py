@@ -117,11 +117,11 @@ class CustomDataset(Dataset):
         self.w_s_aug = w_s_aug
         if w_s_aug:
             self.pipelines = Compose(pipelines)
-
-        for i in range(len(self.data_infos)):
-            ann = self.get_ann_info(i)
-            for label in np.unique(ann['labels']):
-                self.box_img_map[label].append(i)
+            if self.label_type == 0:
+                for i in range(len(self.data_infos)):
+                    ann = self.get_ann_info(i)
+                    for label in np.unique(ann['labels']):
+                        self.box_img_map[label].append(i)
 
     def __len__(self):
         """Total number of samples of data."""
@@ -265,6 +265,10 @@ class CustomDataset(Dataset):
         idx = np.random.choice(idxs)
         img_info = self.data_infos[idx]
         ann_info = self.get_ann_info(idx)
+        while label not in ann_info['labels']:
+            idx = np.random.choice(idxs)
+            img_info = self.data_infos[idx]
+            ann_info = self.get_ann_info(idx)
         results = dict(img_info=img_info, ann_info=ann_info)
         if self.proposals is not None:
             results['proposals'] = self.proposals[idx]
