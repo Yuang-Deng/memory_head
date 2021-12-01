@@ -106,7 +106,7 @@ class PseudoHook(Hook):
         self.interval = interval
         self.start = start
 
-    def after_train_epoch(self, runner):
+    def before_train_epoch(self, runner):
         self._do_evaluate(runner)
 
 
@@ -144,9 +144,11 @@ class DistPseudoHook(BaseDistEvalHook):
             load_dicts = []
             for i in range(world_size):
                 wfile = filename.split('.')[0] + str(i) + '.' + filename.split('.')[1]
-                load_dicts[i] = json.load(open(wfile, 'r'))
+                load_dicts.append(json.load(open(wfile, 'r')))
             load_dict = load_dicts[0]
             for i in range(1, world_size):
+                for ann in load_dicts[i]['annotations']:
+                    ann['id'] = int(str(i) + str(ann['id']))
                 load_dict['annotations'].extend(load_dicts[i]['annotations'])
             json.dump(load_dict, open(filename, 'w'))
             print('\n')

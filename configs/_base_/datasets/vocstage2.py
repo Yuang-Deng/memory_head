@@ -12,7 +12,7 @@ train_pipeline = [
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=32),
     dict(type='DefaultFormatBundle'),
-    dict(type='Collect', keys=['img', 'gt_bboxes', 'gt_labels', 'gt_tags']),
+    dict(type='Collect', keys=['img', 'gt_bboxes', 'gt_labels']),
 ]
 mem_pipeline = [
     dict(type='LoadImageFromFile'),
@@ -24,7 +24,7 @@ mem_pipeline = [
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=32),
     dict(type='DefaultFormatBundle'),
-    dict(type='Collect', keys=['img', 'gt_bboxes', 'gt_labels', 'gt_tags']),
+    dict(type='Collect', keys=['img', 'gt_bboxes', 'gt_labels']),
 ]
 
 test_pipeline = [
@@ -53,7 +53,7 @@ data = dict(
             ],
             img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
             label_type=[0, 1],
-            pipeline=train_pipeline,
+            pipeline=[train_pipeline, mem_pipeline],
             pipelines=mem_pipeline,
             w_s_aug=True),
     val=dict(

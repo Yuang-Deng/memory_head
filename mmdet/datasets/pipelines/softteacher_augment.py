@@ -285,7 +285,7 @@ class GeometricAugmentation(object):
                     results["aug_info"] = []
                 results["aug_info"].append(self.get_aug_info(**magnitude))
             results = self.apply(results, **magnitude)
-            self._filter_invalid(results, min_size=self.min_size)
+            # self._filter_invalid(results, min_size=self.min_size)
         return results
 
     def get_magnitude(self, results) -> dict:

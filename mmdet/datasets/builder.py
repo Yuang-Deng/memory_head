@@ -35,6 +35,7 @@ def _concat_dataset(cfg, default_args=None):
     sample_percents = cfg.get('sample_persent', None)
     label_types = cfg.get('label_type', None)
     dataset_type = cfg.get('type', None)
+    pipelines = cfg.get('pipeline', None)
 
     datasets = []
     num_dset = len(ann_files)
@@ -56,6 +57,8 @@ def _concat_dataset(cfg, default_args=None):
             data_cfg['sample_persent'] = sample_percents[i]
         if isinstance(label_types, (list, tuple)):
             data_cfg['label_type'] = label_types[i]
+        if isinstance(pipelines, (list, tuple)):
+            data_cfg['pipeline'] = pipelines[i]
         datasets.append(build_dataset(data_cfg, default_args))
 
     return ConcatDataset(datasets, separate_eval)

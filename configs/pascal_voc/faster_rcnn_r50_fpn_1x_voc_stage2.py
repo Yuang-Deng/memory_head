@@ -31,11 +31,6 @@ model = dict(
         bbox_head=dict(
             type='MMShared2FCBBoxHead',
             num_classes=20,
-            loss_mid_weight=0,
-            loss_mem_cls_weight=0,
-            loss_mem_box_weight=0,
-            loss_sim_weight=0,
-            sim_target=0,
         ),
     ),
     train_cfg=dict(

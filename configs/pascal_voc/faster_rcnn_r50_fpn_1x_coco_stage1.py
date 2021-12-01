@@ -10,11 +10,6 @@ data = dict(
 )
 model = dict(
     type='EMAFasterRCNN',
-    rpn_head=dict(
-        anchor_generator=dict(
-            scales=[8,16,32]
-        )
-    ),
     roi_head=dict(
         type='MMStandardRoIHead',
         contrastive_lambda2=0.2,

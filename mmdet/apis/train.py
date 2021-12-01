@@ -197,7 +197,7 @@ def train_detector(model,
 
         pseudo_hook = DistPseudoHook if distributed else PseudoHook
         runner.register_hook(
-            pseudo_hook(pseudo_dataloader, start=11, interval=1, metric=eval_cfg['metric']), priority='LOW')
+            pseudo_hook(pseudo_dataloader, start=cfg.runner.max_epochs, interval=1, metric=eval_cfg['metric']), priority='LOW')
 
     # user-defined hooks
     if cfg.get('custom_hooks', None):

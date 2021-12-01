@@ -256,7 +256,8 @@ class GaussianBlur(object):
 
 @PIPELINES.register_module()
 class MOCOTransform:
-    def __init__(self, gray_p=0.2, gaussian_sigma=[.1, 2.], gaussian_p=0.5, color_jitter_p=0.8):
+    def __init__(self, mem_pip=False, gray_p=0.2, gaussian_sigma=[.1, 2.], gaussian_p=0.5, color_jitter_p=0.8):
+        self.mem_pip = mem_pip
         self.random_gray_scale = torchvision.transforms.RandomGrayscale(p=gray_p)
         self.random_gaussian_blur = torchvision.transforms.RandomApply([GaussianBlur(sigma=gaussian_sigma)], p=gaussian_p)
         self.random_colorjitter = torchvision.transforms.RandomApply([
@@ -264,16 +265,20 @@ class MOCOTransform:
             ], p=color_jitter_p),
     
     def __call__(self, results):
-        img = results['img']
-        img = Image.fromarray(np.uint8(img))
-        img = self.random_colorjitter[0](img)
-        img = self.random_gray_scale(img)
-        img = self.random_gaussian_blur(img)
-        img = np.asarray(img)
-
-        # iimage = torch.from_numpy(img.transpose([2, 0, 1]))
-        # iimage = transforms.ToPILImage()(iimage).convert('RGB')
-        # iimage.save('./work_dirs/img_out/test.jpg')
-
-        results['img'] = img
+        if self.mem_pip == True: 
+            img = results['img']
+            img = Image.fromarray(np.uint8(img))
+            img = self.random_colorjitter[0](img)
+            img = self.random_gray_scale(img)
+            img = self.random_gaussian_blur(img)
+            img = np.asarray(img)
+            results['img'] = img
+        elif 1 == results['label_type']:
+            img = results['img']
+            img = Image.fromarray(np.uint8(img))
+            img = self.random_colorjitter[0](img)
+            img = self.random_gray_scale(img)
+            img = self.random_gaussian_blur(img)
+            img = np.asarray(img)
+            results['img'] = img
         return results

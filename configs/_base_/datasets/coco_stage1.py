@@ -1,4 +1,8 @@
 # dataset settings
+import os
+
+env_dist = os.environ
+
 dataset_type = 'CocoDataset'
 data_root = '/data/dya/dataset/coco/'
 img_norm_cfg = dict(
@@ -39,8 +43,8 @@ mem_pipeline = [
     dict(type='DefaultFormatBundle'),
     dict(type='Collect', keys=['img', 'gt_bboxes', 'gt_labels']),
 ]
-percent = 1
-seed = 1
+percent = env_dist['percent']
+seed = env_dist['seed']
 data = dict(
     samples_per_gpu=2,
     workers_per_gpu=0,

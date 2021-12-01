@@ -265,10 +265,6 @@ class CustomDataset(Dataset):
         idx = np.random.choice(idxs)
         img_info = self.data_infos[idx]
         ann_info = self.get_ann_info(idx)
-        while label not in ann_info['labels']:
-            idx = np.random.choice(idxs)
-            img_info = self.data_infos[idx]
-            ann_info = self.get_ann_info(idx)
         results = dict(img_info=img_info, ann_info=ann_info)
         if self.proposals is not None:
             results['proposals'] = self.proposals[idx]

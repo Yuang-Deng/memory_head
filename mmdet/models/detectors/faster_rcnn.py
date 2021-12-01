@@ -71,8 +71,8 @@ class EMAFasterRCNN(TwoStageDetector):
             roi_head.pretrained = pretrained
             self.ema_roi_head = build_head(roi_head)
 
-        if train_cfg is not None:
-            self.ema_rpn_head.assigner = build_assigner(train_cfg.ctr_rpn_assigner)
+        # if train_cfg is not None:
+        #     self.ema_rpn_head.assigner = build_assigner(train_cfg.ctr_rpn_assigner)
         # self.ema_rpn_head.sampler = build_sampler(train_cfg.ctr_rpn.sampler)
         
         self._init_and_freeze('ema_backbone', 'backbone')

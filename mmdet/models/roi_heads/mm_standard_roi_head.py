@@ -396,6 +396,8 @@ class MMStandardRoIHead(MMBaseRoIHead, BBoxTestMixin, MaskTestMixin):
         # 直接找图片的ctr2
         for i in range(gt_labels_anchor.size(0)):
             same_label_item = self.dataset.datasets[0].get_same_label_item(gt_labels_anchor[i])
+            while gt_labels_anchor[i] not in same_label_item['gt_labels'].data.to(device):
+                same_label_item = self.dataset.datasets[0].get_same_label_item(gt_labels_anchor[i])
             feats = kwargs['ema_forward'](same_label_item['img'].data.to(device), same_label_item['gt_bboxes'].data[same_label_item['gt_labels'].data.to(device) == gt_labels_anchor[i]].to(device))
             feats = feats.view(feats.size(0), -1)
             feats = self.mem_fc(feats)
