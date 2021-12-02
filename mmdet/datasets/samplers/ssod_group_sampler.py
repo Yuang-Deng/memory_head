@@ -155,7 +155,8 @@ class SSODDistributedGroupSampler(Sampler):
                  num_replicas=None,
                  rank=None,
                  seed=0,
-                 warm_epoch=-1):
+                 warm_epoch=-1,
+                 postive_per_gpu=0):
         _rank, _num_replicas = get_dist_info()
         if num_replicas is None:
             num_replicas = _num_replicas
@@ -168,6 +169,8 @@ class SSODDistributedGroupSampler(Sampler):
         self.epoch = 0
         self.seed = seed if seed is not None else 0
         self.warm_epoch = warm_epoch
+        self.postive_per_gpu = postive_per_gpu
+
 
         assert hasattr(self.dataset, 'flag')
         self.flag = self.dataset.flag
@@ -199,11 +202,13 @@ class SSODDistributedGroupSampler(Sampler):
         indices = []
         if len(self.group_sizes) == 4:
             self.num_samples = 0
-            samples = self.samples_per_gpu // 2
+            # labeled_samples = self.samples_per_gpu // 2
+            # unlabeled_samples = self.samples_per_gpu // 2
+            labeled_samples = self.postive_per_gpu
+            unlabeled_samples = self.samples_per_gpu - self.postive_per_gpu
             
             # labeled_size_hori = self.group_sizes[0]
             # unlabeled_size_hori = self.group_sizes[1]
-            labeled_indice_hori = np.where(self.flag == 0)
             labeled_indice_hori = np.where(self.flag == 0)[0]
             unlabeled_indice_hori = np.where(self.flag == 2)[0]
             labeled_indice_hori = labeled_indice_hori[list(
@@ -222,25 +227,25 @@ class SSODDistributedGroupSampler(Sampler):
                 torch.randperm(int(len(unlabeled_indice_vert)), generator=g).numpy())].tolist()
 
             tmp = labeled_indice_hori.copy()
-            labeled_extra_hori = samples - (len(labeled_indice_hori) % samples)
+            labeled_extra_hori = labeled_samples - (len(labeled_indice_hori) % labeled_samples)
             for _ in range(labeled_extra_hori // len(labeled_indice_hori)):
                 labeled_indice_hori.extend(tmp)
             labeled_indice_hori.extend(tmp[:labeled_extra_hori % len(labeled_indice_hori)])
 
             tmp = unlabeled_indice_hori.copy()
-            unlabeled_extra_hori = samples - (len(unlabeled_indice_hori) % samples)
+            unlabeled_extra_hori = unlabeled_samples - (len(unlabeled_indice_hori) % unlabeled_samples)
             for _ in range(unlabeled_extra_hori // len(unlabeled_indice_hori)):
                 unlabeled_indice_hori.extend(tmp)
             unlabeled_indice_hori.extend(tmp[:unlabeled_extra_hori % len(unlabeled_indice_hori)])
 
             tmp = labeled_indice_vert.copy()
-            labeled_extra_vert = samples - (len(labeled_indice_vert) % samples)
+            labeled_extra_vert = labeled_samples - (len(labeled_indice_vert) % labeled_samples)
             for _ in range(labeled_extra_vert // len(labeled_indice_vert)):
                 labeled_indice_vert.extend(tmp)
             labeled_indice_vert.extend(tmp[:labeled_extra_vert % len(labeled_indice_vert)])
 
             tmp = unlabeled_indice_vert.copy()
-            unlabeled_extra_vert = samples - (len(unlabeled_indice_vert) % samples)
+            unlabeled_extra_vert = unlabeled_samples - (len(unlabeled_indice_vert) % unlabeled_samples)
             for _ in range(unlabeled_extra_vert // len(unlabeled_indice_vert)):
                 unlabeled_indice_vert.extend(tmp)
             unlabeled_indice_vert.extend(tmp[:unlabeled_extra_vert % len(unlabeled_indice_vert)])
@@ -251,26 +256,23 @@ class SSODDistributedGroupSampler(Sampler):
             labeled_size = len(labeled_indice)
             unlabeled_size = len(unlabeled_indice)
             
-            if self.epoch >= self.warm_epoch:
-                larger = max(labeled_size, unlabeled_size)
-            else:
-                larger = labeled_size
+            # if self.epoch >= self.warm_epoch:
+            #     larger = max(labeled_size, unlabeled_size)
+            # else:
+            #     larger = labeled_size
+
+            larger = unlabeled_size
+
+            all_round = max(int(math.ceil(labeled_size * 1.0 / labeled_samples / self.num_replicas)), int(
+                    math.ceil(unlabeled_size * 1.0 / unlabeled_samples / self.num_replicas)))
                 
-            labeled_extra = int(
-                    math.ceil(
-                        larger * 1.0 / samples / self.num_replicas)
-                ) * samples * self.num_replicas - len(labeled_indice)
-            unlabeled_extra = int(
-                    math.ceil(
-                        larger * 1.0 / samples / self.num_replicas)
-                ) * samples * self.num_replicas - len(unlabeled_indice)
+            labeled_extra = all_round * labeled_samples * self.num_replicas - len(labeled_indice)
+            unlabeled_extra = all_round * unlabeled_samples * self.num_replicas - len(unlabeled_indice)
                 
             unlabeled_extra = 0 if unlabeled_extra < 0 else unlabeled_extra
             labeled_extra = 0 if labeled_extra < 0 else labeled_extra
-            self.num_samples += int(
-                    math.ceil(larger * 1.0 / samples /
-                          self.num_replicas)) * samples
-            self.num_samples *= 2
+            # self.num_samples += int(math.ceil(labeled_size * 1.0 / labeled_samples /self.num_replicas)) * labeled_samples + int(math.ceil(unlabeled_size * 1.0 / unlabeled_samples /self.num_replicas)) * unlabeled_samples
+            # self.num_samples *= 2
 
             tmp = labeled_indice.copy()
             for _ in range(labeled_extra // labeled_size):
@@ -282,10 +284,12 @@ class SSODDistributedGroupSampler(Sampler):
                 unlabeled_indice.extend(tmp)
             unlabeled_indice.extend(tmp[:unlabeled_extra % unlabeled_size])
             # assert len(indices) == self.total_size
+            self.num_samples += int(math.ceil(len(labeled_indice) * 1.0 / labeled_samples /self.num_replicas)) * labeled_samples + int(math.ceil(len(unlabeled_indice) * 1.0 / unlabeled_samples /self.num_replicas)) * unlabeled_samples
 
-            for i in list(torch.randperm(len(labeled_indice) // samples, generator=g)):
-                indices.extend(labeled_indice[i * samples:(i + 1) * samples])
-                indices.extend(unlabeled_indice[i * samples:(i + 1) * samples])
+
+            for i in list(torch.randperm(len(labeled_indice) // labeled_samples, generator=g)):
+                indices.extend(labeled_indice[i * labeled_samples:(i + 1) * labeled_samples])
+                indices.extend(unlabeled_indice[i * unlabeled_samples:(i + 1) * unlabeled_samples])
             # subsample
             offset = self.num_samples * self.rank
             indices = indices[offset:offset + self.num_samples]

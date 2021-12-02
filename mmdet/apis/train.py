@@ -61,6 +61,10 @@ def train_detector(model,
                 f'{cfg.data.imgs_per_gpu} in this experiments')
         cfg.data.samples_per_gpu = cfg.data.imgs_per_gpu
 
+    postive_per_gpu = cfg.data.samples_per_gpu // 2
+    if 'postive_per_gpu' in cfg.data.keys():
+        postive_per_gpu = cfg.data.postive_per_gpu
+        pass
     data_loaders = [
         build_dataloader(
             ds,
@@ -69,7 +73,8 @@ def train_detector(model,
             # cfg.gpus will be ignored if distributed
             len(cfg.gpu_ids),
             dist=distributed,
-            seed=cfg.seed) for ds in dataset
+            seed=cfg.seed,
+            postive_per_gpu=postive_per_gpu) for ds in dataset
     ]
 
     # put model on gpus

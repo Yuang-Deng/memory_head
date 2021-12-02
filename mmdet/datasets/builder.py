@@ -126,7 +126,7 @@ def build_dataloader(dataset,
         # that images on each GPU are in the same group
         if shuffle:
             sampler = SSODDistributedGroupSampler(
-                dataset, samples_per_gpu, world_size, rank, seed=seed)
+                dataset, samples_per_gpu, world_size, rank, seed=seed, postive_per_gpu=kwargs['postive_per_gpu'])
         else:
             sampler = DistributedSampler(
                 dataset, world_size, rank, shuffle=False, seed=seed)
@@ -136,6 +136,8 @@ def build_dataloader(dataset,
         sampler = SSODGroupSampler(dataset, samples_per_gpu) if shuffle else None
         batch_size = num_gpus * samples_per_gpu
         num_workers = num_gpus * workers_per_gpu
+    if 'postive_per_gpu' in kwargs.keys():
+        kwargs.pop('postive_per_gpu')
 
     init_fn = partial(
         worker_init_fn, num_workers=num_workers, rank=rank,
