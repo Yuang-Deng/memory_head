@@ -261,17 +261,16 @@ class MMBBoxHead(BaseModule):
         return one_hot_label
 
     def generate_img_label(self, num_classes, gt_tags, device):
-        # gt_tags = torch.cat(gt_tags, dim=-1)
         img_label = torch.zeros(len(gt_tags), num_classes)
         for i in range(len(gt_tags)):
             for tag in gt_tags[i]:
                 img_label[i, tag] = 1
         return img_label.to(device)
 
-    def generate_img_label_single(self, num_classes, labels, device):
-        img_label = torch.zeros(num_classes)
-        img_label[labels.long()] = 1
-        return img_label.to(device)
+    # def generate_img_label_single(self, num_classes, labels, device):
+    #     img_label = torch.zeros(num_classes)
+    #     img_label[labels.long()] = 1
+    #     return img_label.to(device)
 
     @force_fp32(apply_to=('cls_score', 'bbox_pred', 'mid_cls_score', 'mid_det_score'))
     def loss(self,
