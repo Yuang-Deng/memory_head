@@ -271,7 +271,7 @@ class MMBBoxHead(BaseModule):
     def generate_img_label_single(self, num_classes, labels, device):
         img_label = torch.zeros(num_classes)
         img_label[labels.long()] = 1
-        img_label[0] = 0
+        img_label[20] = 0
         return img_label.to(device)
 
     @force_fp32(apply_to=('cls_score', 'bbox_pred', 'mid_cls_score', 'mid_det_score'))
